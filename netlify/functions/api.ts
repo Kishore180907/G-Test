@@ -30,16 +30,7 @@ function isKeyValid(key: string | undefined): boolean {
   return cleaned.length > 5;
 }
 
-const FALLBACK_OFFLINE_MODELS = [
-  { 
-    id: "demo/offline-assistant", 
-    name: "Demo Assistant (No Keys Required)", 
-    provider: "offline" as const, 
-    description: "A friendly simulated AI agent that helps you test the chat client offline, custom parameters, and explains how to configure live models easily.", 
-    contextLength: 4096, 
-    isFree: true 
-  }
-];
+// CORS headers
 
 const FALLBACK_OPENROUTER_MODELS = [
   { id: "google/gemma-4-31b-it:free", name: "Gemma 4 31B IT (Free)", provider: "openrouter" as const, description: "Google's latest lightweight text generation model with incredible speed.", contextLength: 8192, isFree: true },
@@ -72,6 +63,7 @@ const FALLBACK_CUSTOM_MODELS = [
     }
   }
 ];
+
 
 export default async (req: Request, context: any) => {
   const url = new URL(req.url);
@@ -113,9 +105,6 @@ export default async (req: Request, context: any) => {
   if (path.endsWith("/api/models") || path.endsWith("/models")) {
     const list: any[] = [];
     
-    // Always include offline assistant
-    list.push(...FALLBACK_OFFLINE_MODELS);
-
     if (isKeyValid(process.env.OPENROUTER_API_KEY)) {
       list.push(...FALLBACK_OPENROUTER_MODELS);
     }
@@ -145,173 +134,6 @@ export default async (req: Request, context: any) => {
         return new Response(JSON.stringify({ error: "Messages array is required." }), {
           status: 400,
           headers: { "Content-Type": "application/json", ...corsHeaders }
-        });
-      }
-
-      // 1. Intercept Offline/Demo mode
-      if (providerId === "offline") {
-        const userMessageContent = messages[messages.length - 1]?.content || "";
-        const offlineText = `👋 Hello! I am your **Demo Assistant** (Offline Mode). 
-
-I am here to help you test the user interface, typography pairings, and layout transitions completely key-free! 
-
-### 🔧 How to Activate Live LLMs:
-To unlock actual, state-of-the-art open-source and proprietary models, follow these quick configuration steps:
-
-1. **Google AI Studio (Preview Mode)**:
-   - Your environment automatically has access to a built-in **\`GEMINI_API_KEY\`**, so you can use the **Gemini 3.5 Flash** or **Gemini 3.1 Pro** models immediately without any extra setup!
-   - Under the **Secrets** panel in the AI Studio UI, you can configure other keys:
-     - **\`OPENROUTER_API_KEY\`** (unlocked OpenRouter free & deep models)
-     - **\`NVIDIA_API_KEY\`** (unlocked highly efficient NVIDIA NIMs)
-     - **\`GROQ_API_KEY\`** (unlocked blazing-fast Llama-3/custom GPT-OSS via Groq)
-
-2. **When Deploying on Netlify**:
-   - Go to your Netlify Site Settings dashboard.
-   - Navigate to **Site configuration > Environment variables**.
-   - Declare one or more of:
-     - **\`OPENROUTER_API_KEY\`**
-     - **\`NVIDIA_API_KEY\`**
-     - **\`GROQ_API_KEY\`**
-     - **\`GEMINI_API_KEY\`**
-   - Re-deploy your site or restart your build, and they will become fully operational on your private backend proxy!
-
-### 🧪 Responsive Client Test
-I detected that your message was:
-> "${userMessageContent}"
-
-Your chat interface is running fully responsive. You can test code blocks, bullet points, Markdown rendering, and parameters in the sidebar settings panels right now!`;
-
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          async start(controller) {
-            const words = offlineText.split(/(\s+)/);
-            for (const word of words) {
-              const chunk = {
-                choices: [
-                  {
-                    delta: {
-                      content: word
-                    }
-                  }
-                ]
-              };
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-              await new Promise(resolve => setTimeout(resolve, 15));
-            }
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-            controller.close();
-          }
-        });
-
-        return new Response(stream, {
-          status: 200,
-          headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            ...corsHeaders
-          }
-        });
-      }
-
-      // 2. Intercept Gemini mode
-      if (providerId === "gemini") {
-        if (!isKeyValid(process.env.GEMINI_API_KEY)) {
-          return new Response(JSON.stringify({ error: "GEMINI_API_KEY is not configured or is a placeholder." }), {
-            status: 401,
-            headers: { "Content-Type": "application/json", ...corsHeaders }
-          });
-        }
-
-        const model = modelId || "gemini-3.5-flash";
-        const cleanedGeminiKey = getCleanedKey(process.env.GEMINI_API_KEY);
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${cleanedGeminiKey}`;
-
-        const payload = {
-          contents: messages.map((m: any) => ({
-            role: m.role === "assistant" ? "model" : m.role,
-            parts: [{ text: m.content }]
-          })),
-          systemInstruction: systemPrompt ? { parts: [{ text: systemPrompt }] } : undefined,
-          generationConfig: {
-            temperature: temperature ?? 0.7,
-            maxOutputTokens: maxTokens ?? 2048,
-          }
-        };
-
-        const apiResponse = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-
-        if (!apiResponse.ok) {
-          const errorText = await apiResponse.text();
-          return new Response(errorText, {
-            status: apiResponse.status,
-            headers: { "Content-Type": "application/json", ...corsHeaders }
-          });
-        }
-
-        const encoder = new TextEncoder();
-        const decoder = new TextDecoder("utf-8");
-
-        const stream = new ReadableStream({
-          async start(controller) {
-            const reader = apiResponse.body?.getReader();
-            if (!reader) {
-              controller.close();
-              return;
-            }
-
-            let buffer = "";
-            while (true) {
-              const { value, done } = await reader.read();
-              if (done) break;
-
-              buffer += decoder.decode(value, { stream: true });
-              const lines = buffer.split("\n");
-              buffer = lines.pop() || "";
-
-              for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed) continue;
-
-                if (trimmed.startsWith("data: ")) {
-                  try {
-                    const parsed = JSON.parse(trimmed.substring(6));
-                    const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || "";
-                    if (text) {
-                      const chunk = {
-                        choices: [
-                          {
-                            delta: {
-                              content: text
-                            }
-                          }
-                        ]
-                      };
-                      controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-                    }
-                  } catch (e) {
-                    // Ignore parsing issues
-                  }
-                }
-              }
-            }
-            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-            controller.close();
-          }
-        });
-
-        return new Response(stream, {
-          status: 200,
-          headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            ...corsHeaders
-          }
         });
       }
 

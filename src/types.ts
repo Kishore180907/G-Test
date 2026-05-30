@@ -1,4 +1,4 @@
-export type ProviderId = 'openrouter' | 'nvidia' | 'generic-chat-completion-api' | 'gemini' | 'offline';
+export type ProviderId = 'openrouter' | 'nvidia' | 'generic-chat-completion-api';
 
 export interface Provider {
   id: ProviderId;

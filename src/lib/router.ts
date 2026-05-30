@@ -17,8 +17,11 @@ export function getOptimalModel(
   const eligibleModels = constraint === 'free' ? pool.filter(m => m.isFree) : pool;
 
   if (eligibleModels.length === 0) {
+    if (pool.length > 0) {
+      return { id: pool[0].id, provider: pool[0].provider };
+    }
     // Fail-safe fallbacks if parent pool is still fetching
-    return { id: 'demo/offline-assistant', provider: 'offline' };
+    return { id: 'google/gemma-4-31b-it:free', provider: 'openrouter' };
   }
 
   // Helper matching functions
@@ -33,18 +36,18 @@ export function getOptimalModel(
   // Routing Selection Hierarchy
   if (isCodingOrTech) {
     // Excellent technical models
-    const codeChoice = findModelInPool(['gemini-3.1-pro-preview', 'gpt-oss', 'gemma', 'llama-3.1', 'llama-3.3', 'lfm']);
+    const codeChoice = findModelInPool(['gpt-oss', 'gemma', 'llama-3.1', 'llama-3.3', 'lfm']);
     if (codeChoice) return { id: codeChoice.id, provider: codeChoice.provider };
   }
 
   if (isDeepReasoning) {
     // Elite reasoning/philosophical models
-    const reasoningChoice = findModelInPool(['gemini-3.1-pro-preview', 'gpt-oss', 'llama-3.3', 'gemma', 'nemotron-3']);
+    const reasoningChoice = findModelInPool(['gpt-oss', 'llama-3.3', 'gemma', 'nemotron-3']);
     if (reasoningChoice) return { id: reasoningChoice.id, provider: reasoningChoice.provider };
   }
 
   // Fast lightweight default general-purpose model
-  const generalChoice = findModelInPool(['gemini-3.5-flash', 'gpt-oss', 'gemma', 'llama-3.1', 'nemotron-nano', 'lfm'])
+  const generalChoice = findModelInPool(['gpt-oss', 'gemma', 'llama-3.1', 'nemotron-nano', 'lfm'])
     || eligibleModels.find(m => m.isFree)
     || eligibleModels[0];
 

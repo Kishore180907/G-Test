@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Cpu, Search, Sparkles, AlertCircle, RefreshCw, KeyRound, Check, ChevronDown, Wand2, Info } from 'lucide-react';
+import { Cpu, Search, Sparkles, AlertCircle, RefreshCw, Check, ChevronDown, Wand2, Info } from 'lucide-react';
 import { Model, ProviderId, ServerConfigStatus } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -28,7 +28,7 @@ export function ModelSelector({
 }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'openrouter' | 'nvidia' | 'generic-chat-completion-api' | 'offline'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'openrouter' | 'nvidia' | 'generic-chat-completion-api'>('all');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on click outside
@@ -74,8 +74,7 @@ export function ModelSelector({
       all: models.filter(m => routingMode !== 'smart-free' || m.isFree).length,
       openrouter: models.filter(m => m.provider === 'openrouter' && (routingMode !== 'smart-free' || m.isFree)).length,
       nvidia: models.filter(m => m.provider === 'nvidia' && (routingMode !== 'smart-free' || m.isFree)).length,
-      custom: models.filter(m => m.provider === 'generic-chat-completion-api' && (routingMode !== 'smart-free' || m.isFree)).length,
-      offline: models.filter(m => m.provider === 'offline' && (routingMode !== 'smart-free' || m.isFree)).length
+      custom: models.filter(m => m.provider === 'generic-chat-completion-api' && (routingMode !== 'smart-free' || m.isFree)).length
     };
   }, [models, routingMode]);
 
@@ -92,13 +91,11 @@ export function ModelSelector({
           <div className={`p-1.5 rounded-lg shrink-0 ${
             routingMode !== 'manual'
               ? 'bg-amber-950/40 text-amber-400 border border-amber-900/30'
-              : currentModel?.provider === 'offline'
-                ? 'bg-neutral-950 border border-neutral-850 text-neutral-400'
-                : currentModel?.provider === 'nvidia' 
-                  ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/30' 
-                  : currentModel?.provider === 'generic-chat-completion-api'
-                    ? 'bg-amber-950/40 text-amber-400 border border-amber-900/30'
-                    : 'bg-purple-950/40 text-purple-400 border border-purple-900/30'
+              : currentModel?.provider === 'nvidia' 
+                ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/30' 
+                : currentModel?.provider === 'generic-chat-completion-api'
+                  ? 'bg-amber-950/40 text-amber-400 border border-amber-900/30'
+                  : 'bg-purple-950/40 text-purple-400 border border-purple-900/30'
           }`}>
             {routingMode !== 'manual' ? (
               <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
@@ -113,13 +110,11 @@ export function ModelSelector({
                 ? 'Routing: Smart Free' 
                 : routingMode === 'smart-any' 
                   ? 'Routing: Smart Any' 
-                  : currentModel?.provider === 'offline'
-                    ? 'Demo Simulator'
-                    : currentModel?.provider === 'nvidia' 
-                      ? 'NVIDIA NIM' 
-                      : currentModel?.provider === 'generic-chat-completion-api'
-                        ? 'Custom Groq API'
-                        : 'OpenRouter'}
+                  : currentModel?.provider === 'nvidia' 
+                    ? 'NVIDIA NIM' 
+                    : currentModel?.provider === 'generic-chat-completion-api'
+                      ? 'Custom Groq API'
+                      : 'OpenRouter'}
             </span>
             <span className="block font-bold truncate leading-snug text-neutral-100 text-[11px]">
               {routingMode === 'smart-free' 
@@ -286,40 +281,6 @@ export function ModelSelector({
               >
                 Custom Groq ({providerCounts.custom})
               </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('offline')}
-                className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                  activeTab === 'offline' 
-                    ? 'bg-neutral-900 text-neutral-300 border border-neutral-800' 
-                    : 'text-neutral-500 hover:text-neutral-350 hover:bg-neutral-900/30 border border-transparent'
-                }`}
-              >
-                Demo ({providerCounts.offline})
-              </button>
-            </div>
-
-            {/* Setup indicators status bar */}
-            <div className="px-3.5 py-2 border-b border-neutral-905 bg-neutral-950 flex flex-wrap gap-x-4 gap-y-1.5 justify-start text-[9px] font-medium text-neutral-500">
-              <span className="flex items-center gap-1">
-                <KeyRound className={`w-3.5 h-3.5 ${status.openrouterConfigured ? 'text-purple-400' : 'text-neutral-700'}`} />
-                <span className={status.openrouterConfigured ? 'text-neutral-300' : ''}>
-                  OpenRouter: {status.openrouterConfigured ? 'Enabled' : 'Off'}
-                </span>
-              </span>
-              <span className="flex items-center gap-1">
-                <KeyRound className={`w-3.5 h-3.5 ${status.nvidiaConfigured ? 'text-emerald-450' : 'text-neutral-700'}`} />
-                <span className={status.nvidiaConfigured ? 'text-neutral-300' : ''}>
-                  NVIDIA: {status.nvidiaConfigured ? 'Enabled' : 'Off'}
-                </span>
-              </span>
-              <span className="flex items-center gap-1">
-                <KeyRound className={`w-3.5 h-3.5 ${status.groqConfigured ? 'text-amber-450' : 'text-neutral-700'}`} />
-                <span className={status.groqConfigured ? 'text-neutral-300' : ''}>
-                  Groq: {status.groqConfigured ? 'Enabled' : 'Off'}
-                </span>
-              </span>
             </div>
 
             {/* List entries */}
@@ -356,13 +317,11 @@ export function ModelSelector({
                       )}
 
                       <div className={`p-1.5 rounded-lg shrink-0 mt-0.5 border ${
-                        m.provider === 'offline'
-                          ? 'bg-neutral-950 border-neutral-850 text-neutral-500'
-                          : m.provider === 'nvidia' 
-                            ? 'bg-emerald-950/30 border-emerald-900/30 text-emerald-450' 
-                            : m.provider === 'generic-chat-completion-api'
-                              ? 'bg-amber-950/30 border-amber-900/30 text-amber-450'
-                              : 'bg-purple-950/30 border-purple-900/30 text-purple-450'
+                        m.provider === 'nvidia' 
+                          ? 'bg-emerald-950/30 border-emerald-900/30 text-emerald-450' 
+                          : m.provider === 'generic-chat-completion-api'
+                            ? 'bg-amber-950/30 border-amber-900/30 text-amber-445'
+                            : 'bg-purple-950/30 border-purple-900/30 text-purple-450'
                       }`}>
                         <Cpu className="w-3.5 h-3.5" />
                       </div>
@@ -375,11 +334,6 @@ export function ModelSelector({
                           {m.isFree && (
                             <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-purple-950/60 text-purple-400 border border-purple-900/40 select-none leading-none">
                               FREE
-                            </span>
-                          )}
-                          {m.provider === 'offline' && (
-                            <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-neutral-900 border border-neutral-800 text-neutral-450 select-none leading-none">
-                              DEMO
                             </span>
                           )}
                         </div>

@@ -811,7 +811,7 @@ export default function App() {
               <div className="pt-2 select-none">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-neutral-900/60 bg-[#0d0d0e]/30 text-neutral-500 text-[10px] font-mono leading-none">
                   <Activity className="w-3 h-3 text-emerald-500 animate-pulse" />
-                  <span>Secure Node: {selectedModelObj.provider || 'offline'} active proxy route</span>
+                  <span>Secure Node: {selectedModelObj.provider || 'api'} active proxy route</span>
                 </span>
               </div>
 
@@ -857,11 +857,9 @@ export default function App() {
                           <span>
                             {m.providerUsed === 'nvidia' 
                               ? 'NVIDIA NIM' 
-                              : m.providerUsed === 'offline'
-                                ? 'Demo SIM'
-                                : m.providerUsed === 'generic-chat-completion-api'
-                                  ? 'GROQ API'
-                                  : 'OpenRouter'}
+                              : m.providerUsed === 'generic-chat-completion-api'
+                                ? 'GROQ API'
+                                : 'OpenRouter'}
                           </span>
                           {m.wasAutoRouted && (
                             <>
