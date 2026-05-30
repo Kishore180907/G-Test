@@ -2,26 +2,67 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
+import { GoogleGenAI } from "@google/genai";
 
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
 
+// Initialize Google GenAI
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
+
 // Parsers
 app.use(express.json());
 
+const FALLBACK_OFFLINE_MODELS = [
+  { 
+    id: "demo/offline-assistant", 
+    name: "Demo Assistant (No Keys Required)", 
+    provider: "offline" as const, 
+    description: "A friendly simulated AI agent that helps you test the chat client offline, custom parameters, and explains how to configure live models easily.", 
+    contextLength: 4096, 
+    isFree: true 
+  }
+];
+
+const FALLBACK_GEMINI_MODELS = [
+  { 
+    id: "gemini-3.5-flash", 
+    name: "Gemini 3.5 Flash", 
+    provider: "gemini" as const, 
+    description: "Google's latest ultra-fast, high-performance lightweight text generation model.", 
+    contextLength: 1048576, 
+    isFree: true 
+  },
+  { 
+    id: "gemini-3.1-pro-preview", 
+    name: "Gemini 3.1 Pro Preview", 
+    provider: "gemini" as const, 
+    description: "Google's premium reasoning model designed for complex technical, coding, and logical tasks.", 
+    contextLength: 2097152, 
+    isFree: true 
+  }
+];
+
 const FALLBACK_OPENROUTER_MODELS = [
-  { id: "google/gemma-4-31b-it:free", name: "Gemma 4 31B IT (Free)", provider: "openrouter", description: "Google's latest lightweight text generation model with incredible speed.", contextLength: 8192, isFree: true },
-  { id: "liquid/lfm-2.5-1.2b-instruct:free", name: "Liquid LFM 1.2B Instruct (Free)", provider: "openrouter", description: "An incredibly fast, highly optimized 1.2B model.", contextLength: 32768, isFree: true },
-  { id: "nvidia/nemotron-nano-12b-v2-vl:free", name: "Nemotron Nano 12B Vision (Free)", provider: "openrouter", description: "A high-performance multimodal model by NVIDIA.", contextLength: 4096, isFree: true },
-  { id: "nvidia/nemotron-3-nano-30b-a3b:free", name: "Nemotron-3 Nano (Free)", provider: "openrouter", description: "A highly efficient language model customized by NVIDIA.", contextLength: 4096, isFree: true }
+  { id: "google/gemma-4-31b-it:free", name: "Gemma 4 31B IT (Free)", provider: "openrouter" as const, description: "Google's latest lightweight text generation model with incredible speed.", contextLength: 8192, isFree: true },
+  { id: "liquid/lfm-2.5-1.2b-instruct:free", name: "Liquid LFM 1.2B Instruct (Free)", provider: "openrouter" as const, description: "An incredibly fast, highly optimized 1.2B model.", contextLength: 32768, isFree: true },
+  { id: "nvidia/nemotron-nano-12b-v2-vl:free", name: "Nemotron Nano 12B Vision (Free)", provider: "openrouter" as const, description: "A high-performance multimodal model by NVIDIA.", contextLength: 4096, isFree: true },
+  { id: "nvidia/nemotron-3-nano-30b-a3b:free", name: "Nemotron-3 Nano (Free)", provider: "openrouter" as const, description: "A highly efficient language model customized by NVIDIA.", contextLength: 4096, isFree: true }
 ];
 
 const FALLBACK_NVIDIA_MODELS = [
-  { id: "meta/llama-3.3-70b-instruct", name: "Llama 3.3 70B Instruct", provider: "nvidia", description: "Highly advanced reasoning and language understanding model.", contextLength: 131072, isFree: true },
-  { id: "meta/llama-3.1-8b-instruct", name: "Llama 3.1 8B Instruct", provider: "nvidia", description: "NVIDIA's customized efficient model with exceptional conversational capabilities.", contextLength: 8192, isFree: true },
-  { id: "google/gemma-2-2b-it", name: "Gemma 2 2B IT", provider: "nvidia", description: "Google's lightweight and powerful instruction-following model.", contextLength: 8192, isFree: true }
+  { id: "meta/llama-3.3-70b-instruct", name: "Llama 3.3 70B Instruct", provider: "nvidia" as const, description: "Highly advanced reasoning and language understanding model.", contextLength: 131072, isFree: true },
+  { id: "meta/llama-3.1-8b-instruct", name: "Llama 3.1 8B Instruct", provider: "nvidia" as const, description: "NVIDIA's customized efficient model with exceptional conversational capabilities.", contextLength: 8192, isFree: true },
+  { id: "google/gemma-2-2b-it", name: "Gemma 2 2B IT", provider: "nvidia" as const, description: "Google's lightweight and powerful instruction-following model.", contextLength: 8192, isFree: true }
 ];
 
 const FALLBACK_CUSTOM_MODELS = [
@@ -48,7 +89,8 @@ app.get("/api/status", (req, res) => {
   res.json({
     openrouterConfigured: !!process.env.OPENROUTER_API_KEY,
     nvidiaConfigured: !!process.env.NVIDIA_API_KEY,
-    groqConfigured: !!process.env.GROQ_API_KEY
+    groqConfigured: !!process.env.GROQ_API_KEY,
+    geminiConfigured: !!process.env.GEMINI_API_KEY
   });
 });
 
@@ -56,6 +98,16 @@ app.get("/api/status", (req, res) => {
 app.get("/api/models", async (req, res) => {
   try {
     const list: any[] = [];
+
+    // Always include simulated/offline models so user gets immediate visual options and a guiding welcome walkthrough
+    list.push(...FALLBACK_OFFLINE_MODELS);
+
+    // If Gemini key is configured, include official Gemini models
+    if (process.env.GEMINI_API_KEY) {
+      list.push(...FALLBACK_GEMINI_MODELS);
+    } else {
+      console.log("[Models Config Check] GEMINI_API_KEY is not defined. Skipping Gemini models.");
+    }
 
     // Filter list of models based on which keys are configured
     if (process.env.OPENROUTER_API_KEY) {
@@ -89,6 +141,122 @@ app.post("/api/chat", async (req, res) => {
 
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: "Messages array is required." });
+  }
+
+  if (providerId === "offline") {
+    console.log(`[Offline Simulation Request] Routing simulated content.`);
+    const userMessageContent = messages[messages.length - 1]?.content || "";
+    const offlineText = `👋 Hello! I am your **Demo Assistant** (Offline Mode). 
+
+I am here to help you test the user interface, typography pairings, and layout transitions completely key-free! 
+
+### 🔧 How to Activate Live LLMs:
+To unlock actual, state-of-the-art open-source and proprietary models, follow these quick configuration steps:
+
+1. **Google AI Studio (Preview Mode)**:
+   - Your environment automatically has access to a built-in **\`GEMINI_API_KEY\`**, so you can use the **Gemini 3.5 Flash** or **Gemini 3.1 Pro** models immediately without any extra setup!
+   - Under the **Secrets** panel in the AI Studio UI, you can configure other keys:
+     - **\`OPENROUTER_API_KEY\`** (unlocked OpenRouter free & deep models)
+     - **\`NVIDIA_API_KEY\`** (unlocked highly efficient NVIDIA NIMs)
+     - **\`GROQ_API_KEY\`** (unlocked blazing-fast Llama-3/custom GPT-OSS via Groq)
+
+2. **When Deploying on Netlify**:
+   - Go to your Netlify Site Settings dashboard.
+   - Navigate to **Site configuration > Environment variables**.
+   - Declare one or more of:
+     - **\`OPENROUTER_API_KEY\`**
+     - **\`NVIDIA_API_KEY\`**
+     - **\`GROQ_API_KEY\`**
+     - **\`GEMINI_API_KEY\`**
+   - Re-deploy your site or restart your build, and they will become fully operational on your private backend proxy!
+
+### 🧪 Responsive Client Test
+I detected that your message was:
+> "${userMessageContent}"
+
+Your chat interface is running fully responsive. You can test code blocks, bullet points, Markdown rendering, and parameters in the sidebar settings panels right now!`;
+
+    // Helper to stream simulated response
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const words = offlineText.split(/(\s+)/);
+    for (const word of words) {
+      const chunk = {
+        choices: [
+          {
+            delta: {
+              content: word
+            }
+          }
+        ]
+      };
+      res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+      if (typeof (res as any).flush === "function") {
+        (res as any).flush();
+      }
+      await new Promise(resolve => setTimeout(resolve, 15));
+    }
+    res.write("data: [DONE]\n\n");
+    return res.end();
+  }
+
+  if (providerId === "gemini") {
+    if (!process.env.GEMINI_API_KEY) {
+      console.warn(`[Proxy Chat Warning] GEMINI_API_KEY is not set.`);
+      return res.status(401).json({ 
+        error: "GEMINI_API_KEY is not configured on the server. Please check your AI Studio secrets." 
+      });
+    }
+
+    console.log(`[Proxy Gemini Request] Routing request to Gemini model: ${modelId}`);
+
+    try {
+      // Map chat messages format to Google GenAI format (it uses roles: user, model)
+      const contents = messages.map((m: any) => ({
+        role: m.role === "assistant" ? "model" : m.role,
+        parts: [{ text: m.content }]
+      }));
+
+      const responseStream = await ai.models.generateContentStream({
+        model: modelId || "gemini-3.5-flash",
+        contents,
+        config: {
+          systemInstruction: systemPrompt || undefined,
+          temperature: temperature ?? 0.7,
+        }
+      });
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      for await (const chunk of responseStream) {
+        const text = chunk.text || "";
+        if (text) {
+          const chunkPayload = {
+            choices: [
+              {
+                delta: {
+                  content: text
+                }
+              }
+            ]
+          };
+          res.write(`data: ${JSON.stringify(chunkPayload)}\n\n`);
+          if (typeof (res as any).flush === "function") {
+            (res as any).flush();
+          }
+        }
+      }
+
+      res.write("data: [DONE]\n\n");
+      return res.end();
+    } catch (error: any) {
+      console.error("[Proxy Gemini Error]:", error);
+      return res.status(500).json({ error: error.message });
+    }
   }
 
   // Choose URL and API Key

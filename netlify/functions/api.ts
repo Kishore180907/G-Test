@@ -1,14 +1,44 @@
+const FALLBACK_OFFLINE_MODELS = [
+  { 
+    id: "demo/offline-assistant", 
+    name: "Demo Assistant (No Keys Required)", 
+    provider: "offline" as const, 
+    description: "A friendly simulated AI agent that helps you test the chat client offline, custom parameters, and explains how to configure live models easily.", 
+    contextLength: 4096, 
+    isFree: true 
+  }
+];
+
+const FALLBACK_GEMINI_MODELS = [
+  { 
+    id: "gemini-3.5-flash", 
+    name: "Gemini 3.5 Flash", 
+    provider: "gemini" as const, 
+    description: "Google's latest ultra-fast, high-performance lightweight text generation model.", 
+    contextLength: 1048576, 
+    isFree: true 
+  },
+  { 
+    id: "gemini-3.1-pro-preview", 
+    name: "Gemini 3.1 Pro Preview", 
+    provider: "gemini" as const, 
+    description: "Google's premium reasoning model designed for complex technical, coding, and logical tasks.", 
+    contextLength: 2097152, 
+    isFree: true 
+  }
+];
+
 const FALLBACK_OPENROUTER_MODELS = [
-  { id: "google/gemma-4-31b-it:free", name: "Gemma 4 31B IT (Free)", provider: "openrouter", description: "Google's latest lightweight text generation model with incredible speed.", contextLength: 8192, isFree: true },
-  { id: "liquid/lfm-2.5-1.2b-instruct:free", name: "Liquid LFM 1.2B Instruct (Free)", provider: "openrouter", description: "An incredibly fast, highly optimized 1.2B model.", contextLength: 32768, isFree: true },
-  { id: "nvidia/nemotron-nano-12b-v2-vl:free", name: "Nemotron Nano 12B Vision (Free)", provider: "openrouter", description: "A high-performance multimodal model by NVIDIA.", contextLength: 4096, isFree: true },
-  { id: "nvidia/nemotron-3-nano-30b-a3b:free", name: "Nemotron-3 Nano (Free)", provider: "openrouter", description: "A highly efficient language model customized by NVIDIA.", contextLength: 4096, isFree: true }
+  { id: "google/gemma-4-31b-it:free", name: "Gemma 4 31B IT (Free)", provider: "openrouter" as const, description: "Google's latest lightweight text generation model with incredible speed.", contextLength: 8192, isFree: true },
+  { id: "liquid/lfm-2.5-1.2b-instruct:free", name: "Liquid LFM 1.2B Instruct (Free)", provider: "openrouter" as const, description: "An incredibly fast, highly optimized 1.2B model.", contextLength: 32768, isFree: true },
+  { id: "nvidia/nemotron-nano-12b-v2-vl:free", name: "Nemotron Nano 12B Vision (Free)", provider: "openrouter" as const, description: "A high-performance multimodal model by NVIDIA.", contextLength: 4096, isFree: true },
+  { id: "nvidia/nemotron-3-nano-30b-a3b:free", name: "Nemotron-3 Nano (Free)", provider: "openrouter" as const, description: "A highly efficient language model customized by NVIDIA.", contextLength: 4096, isFree: true }
 ];
 
 const FALLBACK_NVIDIA_MODELS = [
-  { id: "meta/llama-3.3-70b-instruct", name: "Llama 3.3 70B Instruct", provider: "nvidia", description: "Highly advanced reasoning and language understanding model.", contextLength: 131072, isFree: true },
-  { id: "meta/llama-3.1-8b-instruct", name: "Llama 3.1 8B Instruct", provider: "nvidia", description: "NVIDIA's customized efficient model with exceptional conversational capabilities.", contextLength: 8192, isFree: true },
-  { id: "google/gemma-2-2b-it", name: "Gemma 2 2B IT", provider: "nvidia", description: "Google's lightweight and powerful instruction-following model.", contextLength: 8192, isFree: true }
+  { id: "meta/llama-3.3-70b-instruct", name: "Llama 3.3 70B Instruct", provider: "nvidia" as const, description: "Highly advanced reasoning and language understanding model.", contextLength: 131072, isFree: true },
+  { id: "meta/llama-3.1-8b-instruct", name: "Llama 3.1 8B Instruct", provider: "nvidia" as const, description: "NVIDIA's customized efficient model with exceptional conversational capabilities.", contextLength: 8192, isFree: true },
+  { id: "google/gemma-2-2b-it", name: "Gemma 2 2B IT", provider: "nvidia" as const, description: "Google's lightweight and powerful instruction-following model.", contextLength: 8192, isFree: true }
 ];
 
 const FALLBACK_CUSTOM_MODELS = [
@@ -53,7 +83,8 @@ export default async (req: Request, context: any) => {
       JSON.stringify({
         openrouterConfigured: !!process.env.OPENROUTER_API_KEY,
         nvidiaConfigured: !!process.env.NVIDIA_API_KEY,
-        groqConfigured: !!process.env.GROQ_API_KEY
+        groqConfigured: !!process.env.GROQ_API_KEY,
+        geminiConfigured: !!process.env.GEMINI_API_KEY
       }),
       {
         status: 200,
@@ -68,6 +99,13 @@ export default async (req: Request, context: any) => {
   // Route 2: Get Models
   if (path.endsWith("/api/models") || path.endsWith("/models")) {
     const list: any[] = [];
+    
+    // Always include offline assistant
+    list.push(...FALLBACK_OFFLINE_MODELS);
+
+    if (process.env.GEMINI_API_KEY) {
+      list.push(...FALLBACK_GEMINI_MODELS);
+    }
     if (process.env.OPENROUTER_API_KEY) {
       list.push(...FALLBACK_OPENROUTER_MODELS);
     }
@@ -100,6 +138,173 @@ export default async (req: Request, context: any) => {
         });
       }
 
+      // 1. Intercept Offline/Demo mode
+      if (providerId === "offline") {
+        const userMessageContent = messages[messages.length - 1]?.content || "";
+        const offlineText = `👋 Hello! I am your **Demo Assistant** (Offline Mode). 
+
+I am here to help you test the user interface, typography pairings, and layout transitions completely key-free! 
+
+### 🔧 How to Activate Live LLMs:
+To unlock actual, state-of-the-art open-source and proprietary models, follow these quick configuration steps:
+
+1. **Google AI Studio (Preview Mode)**:
+   - Your environment automatically has access to a built-in **\`GEMINI_API_KEY\`**, so you can use the **Gemini 3.5 Flash** or **Gemini 3.1 Pro** models immediately without any extra setup!
+   - Under the **Secrets** panel in the AI Studio UI, you can configure other keys:
+     - **\`OPENROUTER_API_KEY\`** (unlocked OpenRouter free & deep models)
+     - **\`NVIDIA_API_KEY\`** (unlocked highly efficient NVIDIA NIMs)
+     - **\`GROQ_API_KEY\`** (unlocked blazing-fast Llama-3/custom GPT-OSS via Groq)
+
+2. **When Deploying on Netlify**:
+   - Go to your Netlify Site Settings dashboard.
+   - Navigate to **Site configuration > Environment variables**.
+   - Declare one or more of:
+     - **\`OPENROUTER_API_KEY\`**
+     - **\`NVIDIA_API_KEY\`**
+     - **\`GROQ_API_KEY\`**
+     - **\`GEMINI_API_KEY\`**
+   - Re-deploy your site or restart your build, and they will become fully operational on your private backend proxy!
+
+### 🧪 Responsive Client Test
+I detected that your message was:
+> "${userMessageContent}"
+
+Your chat interface is running fully responsive. You can test code blocks, bullet points, Markdown rendering, and parameters in the sidebar settings panels right now!`;
+
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          async start(controller) {
+            const words = offlineText.split(/(\s+)/);
+            for (const word of words) {
+              const chunk = {
+                choices: [
+                  {
+                    delta: {
+                      content: word
+                    }
+                  }
+                ]
+              };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+              await new Promise(resolve => setTimeout(resolve, 15));
+            }
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          }
+        });
+
+        return new Response(stream, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            ...corsHeaders
+          }
+        });
+      }
+
+      // 2. Intercept Gemini mode
+      if (providerId === "gemini") {
+        if (!process.env.GEMINI_API_KEY) {
+          return new Response(JSON.stringify({ error: "GEMINI_API_KEY is not configured on the server." }), {
+            status: 401,
+            headers: { "Content-Type": "application/json", ...corsHeaders }
+          });
+        }
+
+        const model = modelId || "gemini-3.5-flash";
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${process.env.GEMINI_API_KEY}`;
+
+        const payload = {
+          contents: messages.map((m: any) => ({
+            role: m.role === "assistant" ? "model" : m.role,
+            parts: [{ text: m.content }]
+          })),
+          systemInstruction: systemPrompt ? { parts: [{ text: systemPrompt }] } : undefined,
+          generationConfig: {
+            temperature: temperature ?? 0.7,
+            maxOutputTokens: maxTokens ?? 2048,
+          }
+        };
+
+        const apiResponse = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (!apiResponse.ok) {
+          const errorText = await apiResponse.text();
+          return new Response(errorText, {
+            status: apiResponse.status,
+            headers: { "Content-Type": "application/json", ...corsHeaders }
+          });
+        }
+
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder("utf-8");
+
+        const stream = new ReadableStream({
+          async start(controller) {
+            const reader = apiResponse.body?.getReader();
+            if (!reader) {
+              controller.close();
+              return;
+            }
+
+            let buffer = "";
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() || "";
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+
+                if (trimmed.startsWith("data: ")) {
+                  try {
+                    const parsed = JSON.parse(trimmed.substring(6));
+                    const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                    if (text) {
+                      const chunk = {
+                        choices: [
+                          {
+                            delta: {
+                              content: text
+                            }
+                          }
+                        ]
+                      };
+                      controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+                    }
+                  } catch (e) {
+                    // Ignore parsing issues
+                  }
+                }
+              }
+            }
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          }
+        });
+
+        return new Response(stream, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            ...corsHeaders
+          }
+        });
+      }
+
+      // 3. Other third party providers
       let apiKey = "";
       let baseEndpoint = "";
 
@@ -183,7 +388,7 @@ export default async (req: Request, context: any) => {
         }
       });
     } catch (error: any) {
-      console.error("[Netlify Serverless Internal Error]:", error);
+      console.error("[Netlify Serverless Error]:", error);
       return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
         headers: { "Content-Type": "application/json", ...corsHeaders }

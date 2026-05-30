@@ -599,14 +599,14 @@ export default function App() {
         )}
 
         {/* API warning for unconfigured setup */}
-        {!status.openrouterConfigured && !status.nvidiaConfigured && !status.groqConfigured && (
-          <div className="bg-amber-950/30 border-b border-amber-900/30 px-6 py-3 flex flex-wrap gap-x-4 gap-y-1.5 items-center justify-center text-amber-250 text-xs text-center select-none">
+        {!status.openrouterConfigured && !status.nvidiaConfigured && !status.groqConfigured && !status.geminiConfigured && (
+          <div className="bg-amber-955/20 border-b border-amber-900/35 px-6 py-3 flex flex-wrap gap-x-4 gap-y-1.5 items-center justify-center text-amber-200 text-xs text-center select-none">
             <span className="flex items-center gap-1.5 font-bold">
               <KeyRound className="w-4 h-4 text-amber-400" />
-              API Key Config Required
+              API Key Config Optional
             </span>
             <p className="leading-normal max-w-xl">
-              Configure your API keys in the **Secrets** panel in the AI Studio UI as **`OPENROUTER_API_KEY`**, **`NVIDIA_API_KEY`**, or **`GROQ_API_KEY`** to access all live models.
+              Currently running in **Demo Mode**. Configure your API keys in the **Secrets** panel in the AI Studio UI as **`GEMINI_API_KEY`**, **`OPENROUTER_API_KEY`**, **`NVIDIA_API_KEY`**, or **`GROQ_API_KEY`** to access all live models.
             </p>
           </div>
         )}
@@ -638,25 +638,25 @@ export default function App() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg mx-auto pt-4 text-left">
                 <div className="p-4 rounded-2xl border border-slate-800/80 bg-slate-950/35 space-y-2">
                   <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${status.openrouterConfigured ? 'bg-emerald-500' : 'bg-slate-600'}`} />
-                    <span className="text-xs font-bold text-slate-100 uppercase tracking-wider">OpenRouter API</span>
+                    <span className={`w-2 h-2 rounded-full ${status.geminiConfigured ? 'bg-purple-500 animate-pulse' : 'bg-slate-600'}`} />
+                    <span className="text-xs font-bold text-slate-100 uppercase tracking-wider">Google Gemini API</span>
                   </div>
                   <p className="text-xs text-slate-400 leading-normal">
-                    {status.openrouterConfigured 
-                      ? "Connected! Accessing massive array of direct open-source models immediately."
-                      : "Unconfigured. Place key in Secrets to load model weights registry."}
+                    {status.geminiConfigured 
+                      ? "Connected! Google's premium Gemini 3.5 & 3.1 models are fully live."
+                      : "Using fallback demo mode. Please configure your key to unleash official Google models."}
                   </p>
                 </div>
 
                 <div className="p-4 rounded-2xl border border-slate-800/80 bg-slate-950/35 space-y-2">
                   <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${status.nvidiaConfigured ? 'bg-emerald-500' : 'bg-slate-600'}`} />
-                    <span className="text-xs font-bold text-slate-100 uppercase tracking-wider">NVIDIA NIM API</span>
+                    <span className={`w-2 h-2 rounded-full ${status.openrouterConfigured ? 'bg-emerald-500' : 'bg-slate-600'}`} />
+                    <span className="text-xs font-bold text-slate-100 uppercase tracking-wider">OpenRouter API</span>
                   </div>
                   <p className="text-xs text-slate-400 leading-normal">
-                    {status.nvidiaConfigured 
-                      ? "Connected! Deep NVIDIA customized neural architectures are fully active."
-                      : "Unconfigured. NVIDIA key will unlock enterprise-ready server microservices."}
+                    {status.openrouterConfigured 
+                      ? "Connected! High-performance OSS models are loaded and streaming."
+                      : "Unconfigured. Add key to Secrets to deploy massive open weights directory."}
                   </p>
                 </div>
               </div>
@@ -694,11 +694,21 @@ export default function App() {
                         <div className="flex items-center gap-1.5 text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider mb-2 pb-1 border-b border-slate-800/40 select-none">
                           <span>{m.modelUsed?.split('/').pop() || 'Model'}</span>
                           <span>•</span>
-                          <span>{m.providerUsed === 'nvidia' ? 'NVIDIA NIM' : 'OpenRouter'}</span>
+                          <span>
+                            {m.providerUsed === 'nvidia' 
+                              ? 'NVIDIA NIM' 
+                              : m.providerUsed === 'gemini'
+                                ? 'Google Gemini'
+                                : m.providerUsed === 'offline'
+                                  ? 'Offline Demo'
+                                  : m.providerUsed === 'generic-chat-completion-api'
+                                    ? 'Custom (Groq)'
+                                    : 'OpenRouter'}
+                          </span>
                           {m.wasAutoRouted && (
                             <>
                               <span>•</span>
-                              <span className="flex items-center gap-0.5 text-amber-450 bg-amber-950/40 border border-amber-900/30 px-1 py-0.5 rounded font-extrabold text-[8.5px]">
+                              <span className="flex items-center gap-0.5 text-amber-450 bg-amber-955/20 border border-amber-900/40 px-1 py-0.5 rounded font-extrabold text-[8.5px]">
                                 <Sparkles className="w-2.5 h-2.5 text-amber-400 shrink-0" />
                                 Smart Routed
                               </span>

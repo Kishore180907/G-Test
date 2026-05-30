@@ -1,4 +1,4 @@
-export type ProviderId = 'openrouter' | 'nvidia' | 'generic-chat-completion-api';
+export type ProviderId = 'openrouter' | 'nvidia' | 'generic-chat-completion-api' | 'gemini' | 'offline';
 
 export interface Provider {
   id: ProviderId;
@@ -52,4 +52,5 @@ export interface ServerConfigStatus {
   openrouterConfigured: boolean;
   nvidiaConfigured: boolean;
   groqConfigured?: boolean;
+  geminiConfigured?: boolean;
 }

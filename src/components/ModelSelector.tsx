@@ -1,13 +1,13 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Cpu, Search, Sparkles, AlertCircle, RefreshCw, KeyRound, Check, HelpCircle, ChevronDown } from 'lucide-react';
-import { Model, ProviderId } from '../types';
+import { Model, ProviderId, ServerConfigStatus } from '../types';
 
 interface ModelSelectorProps {
   models: Model[];
   selectedModelId: string;
   selectedProviderId: ProviderId;
   onSelect: (modelId: string, providerId: ProviderId) => void;
-  status: { openrouterConfigured: boolean; nvidiaConfigured: boolean; groqConfigured?: boolean };
+  status: ServerConfigStatus;
   onRefreshModels: () => void;
   isLoadingModels: boolean;
   routingMode: 'manual' | 'smart-free' | 'smart-any';
@@ -27,7 +27,7 @@ export function ModelSelector({
 }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'openrouter' | 'nvidia' | 'generic-chat-completion-api'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'openrouter' | 'nvidia' | 'generic-chat-completion-api' | 'gemini' | 'offline'>('all');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on click outside
@@ -73,7 +73,9 @@ export function ModelSelector({
       all: models.filter(m => routingMode !== 'smart-free' || m.isFree).length,
       openrouter: models.filter(m => m.provider === 'openrouter' && (routingMode !== 'smart-free' || m.isFree)).length,
       nvidia: models.filter(m => m.provider === 'nvidia' && (routingMode !== 'smart-free' || m.isFree)).length,
-      custom: models.filter(m => m.provider === 'generic-chat-completion-api' && (routingMode !== 'smart-free' || m.isFree)).length
+      custom: models.filter(m => m.provider === 'generic-chat-completion-api' && (routingMode !== 'smart-free' || m.isFree)).length,
+      gemini: models.filter(m => m.provider === 'gemini' && (routingMode !== 'smart-free' || m.isFree)).length,
+      offline: models.filter(m => m.provider === 'offline' && (routingMode !== 'smart-free' || m.isFree)).length
     };
   }, [models, routingMode]);
 
@@ -89,11 +91,15 @@ export function ModelSelector({
           <div className={`p-1.5 rounded-lg shrink-0 ${
             routingMode !== 'manual'
               ? 'bg-amber-950/85 text-amber-400 border border-amber-800/50 animate-pulse'
-              : currentModel?.provider === 'nvidia' 
-                ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/40' 
-                : currentModel?.provider === 'generic-chat-completion-api'
-                  ? 'bg-amber-955/40 text-amber-400 border border-amber-800/50'
-                  : 'bg-indigo-950/80 text-indigo-400 border border-indigo-800/40'
+              : currentModel?.provider === 'gemini'
+                ? 'bg-purple-950/80 text-purple-400 border border-purple-800/40'
+                : currentModel?.provider === 'offline'
+                  ? 'bg-slate-950/85 text-slate-400 border border-slate-800/50'
+                  : currentModel?.provider === 'nvidia' 
+                    ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/40' 
+                    : currentModel?.provider === 'generic-chat-completion-api'
+                      ? 'bg-amber-955/40 text-amber-400 border border-amber-800/50'
+                      : 'bg-indigo-950/80 text-indigo-400 border border-indigo-800/40'
           }`}>
             {routingMode !== 'manual' ? <Sparkles className="w-4 h-4 text-amber-400" /> : <Cpu className="w-4 h-4" />}
           </div>
@@ -103,11 +109,15 @@ export function ModelSelector({
                 ? 'Auto-Router: Free' 
                 : routingMode === 'smart-any' 
                   ? 'Auto-Router: Any' 
-                  : currentModel?.provider === 'nvidia' 
-                    ? 'NVIDIA NIM' 
-                    : currentModel?.provider === 'generic-chat-completion-api'
-                      ? 'Custom API (Groq)'
-                      : 'OpenRouter'}
+                  : currentModel?.provider === 'gemini'
+                    ? 'Google Gemini'
+                    : currentModel?.provider === 'offline'
+                      ? 'Offline Demo'
+                      : currentModel?.provider === 'nvidia' 
+                        ? 'NVIDIA NIM' 
+                        : currentModel?.provider === 'generic-chat-completion-api'
+                          ? 'Custom API (Groq)'
+                          : 'OpenRouter'}
             </span>
             <span className="block font-semibold truncate leading-tight text-white text-xs">
               {routingMode === 'smart-free' 
@@ -216,67 +226,93 @@ export function ModelSelector({
           </div>
 
           {/* Provider tabs */}
-          <div className="flex border-b border-slate-800 px-2 py-1 bg-slate-950/20 select-none">
+          <div className="flex flex-wrap gap-1 border-b border-slate-800 p-1.5 bg-slate-950/20 select-none">
             <button
               onClick={() => setActiveTab('all')}
-              className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-lighter text-center border-b-2 transition-all cursor-pointer ${
+              className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 activeTab === 'all' 
-                  ? 'border-emerald-500 text-emerald-400' 
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
+                  ? 'bg-slate-800 text-white border border-slate-700' 
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/35 border border-transparent'
               }`}
             >
               All ({providerCounts.all})
             </button>
             <button
+              onClick={() => setActiveTab('gemini')}
+              className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                activeTab === 'gemini' 
+                  ? 'bg-purple-950/50 border border-purple-800/40 text-purple-350' 
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/35 border border-transparent'
+              }`}
+            >
+              Gemini ({providerCounts.gemini})
+            </button>
+            <button
               onClick={() => setActiveTab('openrouter')}
-              className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-lighter text-center border-b-2 transition-all cursor-pointer ${
+              className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 activeTab === 'openrouter' 
-                  ? 'border-emerald-500 text-emerald-400' 
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
+                  ? 'bg-indigo-950/50 border border-indigo-800/40 text-indigo-400' 
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/35 border border-transparent'
               }`}
             >
               OpenRouter ({providerCounts.openrouter})
             </button>
             <button
               onClick={() => setActiveTab('nvidia')}
-              className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-lighter text-center border-b-2 transition-all cursor-pointer ${
+              className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 activeTab === 'nvidia' 
-                  ? 'border-emerald-500 text-emerald-400' 
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
+                  ? 'bg-emerald-950/50 border border-emerald-800/40 text-emerald-400' 
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/35 border border-transparent'
               }`}
             >
               NVIDIA ({providerCounts.nvidia})
             </button>
             <button
               onClick={() => setActiveTab('generic-chat-completion-api')}
-              className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-lighter text-center border-b-2 transition-all cursor-pointer ${
+              className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 activeTab === 'generic-chat-completion-api' 
-                  ? 'border-emerald-500 text-emerald-400' 
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
+                  ? 'bg-amber-955/20 border border-amber-800/40 text-amber-400' 
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/35 border border-transparent'
               }`}
             >
               Custom ({providerCounts.custom})
             </button>
+            <button
+              onClick={() => setActiveTab('offline')}
+              className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                activeTab === 'offline' 
+                  ? 'bg-slate-950 border border-slate-700/55 text-slate-350 font-semibold' 
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/35 border border-transparent'
+              }`}
+            >
+              Demo ({providerCounts.offline})
+            </button>
           </div>
 
           {/* Setup verification tags */}
-          <div className="px-4 py-2 border-b border-slate-800/50 bg-slate-950/15 flex flex-wrap gap-x-4 gap-y-1.5 justify-start text-[10px]">
+          <div className="px-3.5 py-2 border-b border-slate-800/50 bg-slate-950/15 flex flex-wrap gap-x-3.5 gap-y-1.5 justify-start text-[9.5px]">
             <span className="flex items-center gap-1">
-              <KeyRound className={`w-3 h-3 ${status.openrouterConfigured ? 'text-emerald-500' : 'text-slate-500'}`} />
+              <KeyRound className={`w-3 h-3 ${status.geminiConfigured ? 'text-purple-400 shrink-0' : 'text-slate-500 shrink-0'}`} />
+              <span className={status.geminiConfigured ? 'text-slate-300 font-medium' : 'text-slate-500'}>
+                Gemini: {status.geminiConfigured ? 'Active (Auto)' : 'Unconfigured'}
+              </span>
+            </span>
+            <span className="flex items-center gap-1">
+              <KeyRound className={`w-3 h-3 ${status.openrouterConfigured ? 'text-emerald-500 shrink-0' : 'text-slate-500 shrink-0'}`} />
               <span className={status.openrouterConfigured ? 'text-slate-300' : 'text-slate-500'}>
-                OpenRouter Key: {status.openrouterConfigured ? 'Active' : 'Unconfigured'}
+                OpenRouter: {status.openrouterConfigured ? 'Active' : 'Unconfigured'}
               </span>
             </span>
             <span className="flex items-center gap-1">
-              <KeyRound className={`w-3 h-3 ${status.nvidiaConfigured ? 'text-emerald-500' : 'text-slate-500'}`} />
+              <KeyRound className={`w-3 h-3 ${status.nvidiaConfigured ? 'text-emerald-500 shrink-0' : 'text-slate-500 shrink-0'}`} />
               <span className={status.nvidiaConfigured ? 'text-slate-300' : 'text-slate-500'}>
-                NVIDIA Key: {status.nvidiaConfigured ? 'Active' : 'Unconfigured'}
+                NVIDIA: {status.nvidiaConfigured ? 'Active' : 'Unconfigured'}
               </span>
             </span>
             <span className="flex items-center gap-1">
-              <KeyRound className={`w-3 h-3 ${status.groqConfigured ? 'text-emerald-500' : 'text-slate-500'}`} />
-              <span className={status.groqConfigured ? 'text-slate-300' : 'text-slate-500'}>
-                Groq Custom Key: {status.groqConfigured ? 'Active' : 'Unconfigured'}
+              <KeyRound className={`w-3 h-3 ${status.groqConfigured ? 'text-emerald-500 shrink-0' : 'text-slate-500 shrink-0'}`} />
+              <span className={status.groqConfigured ? 'text-slate-300 font-medium' : 'text-slate-500'}>
+                Groq: {status.groqConfigured ? 'Active' : 'Unconfigured'}
               </span>
             </span>
           </div>
@@ -315,11 +351,15 @@ export function ModelSelector({
                     )}
 
                     <div className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${
-                      m.provider === 'nvidia' 
-                        ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/30' 
-                        : m.provider === 'generic-chat-completion-api'
-                          ? 'bg-amber-955/35 text-amber-400 border border-amber-800/40'
-                          : 'bg-indigo-950/60 text-indigo-400 border border-indigo-800/30'
+                      m.provider === 'gemini'
+                        ? 'bg-purple-950/60 text-purple-450 border border-purple-800/40'
+                        : m.provider === 'offline'
+                          ? 'bg-slate-950/80 text-slate-400 border border-slate-700/50'
+                          : m.provider === 'nvidia' 
+                            ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/30' 
+                            : m.provider === 'generic-chat-completion-api'
+                              ? 'bg-amber-955/35 text-amber-400 border border-amber-800/40'
+                              : 'bg-indigo-950/60 text-indigo-400 border border-indigo-800/30'
                     }`}>
                       <Cpu className="w-3.5 h-3.5" />
                     </div>
@@ -332,6 +372,16 @@ export function ModelSelector({
                         {m.isFree && (
                           <span className="px-1 py-0.5 rounded text-[8px] font-extrabold uppercase bg-emerald-950 text-emerald-400 border border-emerald-850 select-none">
                             FREE
+                          </span>
+                        )}
+                        {m.provider === 'offline' && (
+                          <span className="px-1 py-0.5 rounded text-[8px] font-black uppercase bg-slate-900 border border-slate-705 text-slate-400 select-none">
+                            DEMO
+                          </span>
+                        )}
+                        {m.provider === 'gemini' && (
+                          <span className="px-1 py-0.5 rounded text-[8px] font-extrabold uppercase bg-purple-950 border border-purple-800 text-purple-400 select-none animate-pulse">
+                            GEMINI
                           </span>
                         )}
                         {m.provider === 'nvidia' && (
