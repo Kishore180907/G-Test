@@ -1,3 +1,35 @@
+// Helper function to strip quotes and trim whitespaces from key values (common during copy-pasting to Netlify UI)
+function getCleanedKey(key: string | undefined): string {
+  if (!key) return "";
+  let cleaned = key.trim();
+  if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+    cleaned = cleaned.substring(1, cleaned.length - 1);
+  } else if (cleaned.startsWith("'") && cleaned.endsWith("'")) {
+    cleaned = cleaned.substring(1, cleaned.length - 1);
+  }
+  return cleaned.trim();
+}
+
+// Check if a key is formatted properly and not just a placeholder value from .env.example
+function isKeyValid(key: string | undefined): boolean {
+  const cleaned = getCleanedKey(key);
+  if (!cleaned) return false;
+  const lower = cleaned.toLowerCase();
+  if (
+    lower === "my_gemini_api_key" ||
+    lower === "my_openrouter_api_key" ||
+    lower === "my_nvidia_api_key" ||
+    lower === "my_groq_api_key" ||
+    lower === "my_app_url" ||
+    lower.startsWith("my_") ||
+    lower === "placeholder" ||
+    lower === "your_api_key"
+  ) {
+    return false;
+  }
+  return cleaned.length > 5;
+}
+
 const FALLBACK_OFFLINE_MODELS = [
   { 
     id: "demo/offline-assistant", 
@@ -81,10 +113,10 @@ export default async (req: Request, context: any) => {
   if (path.endsWith("/api/status") || path.endsWith("/status")) {
     return new Response(
       JSON.stringify({
-        openrouterConfigured: !!process.env.OPENROUTER_API_KEY,
-        nvidiaConfigured: !!process.env.NVIDIA_API_KEY,
-        groqConfigured: !!process.env.GROQ_API_KEY,
-        geminiConfigured: !!process.env.GEMINI_API_KEY
+        openrouterConfigured: isKeyValid(process.env.OPENROUTER_API_KEY),
+        nvidiaConfigured: isKeyValid(process.env.NVIDIA_API_KEY),
+        groqConfigured: isKeyValid(process.env.GROQ_API_KEY),
+        geminiConfigured: isKeyValid(process.env.GEMINI_API_KEY)
       }),
       {
         status: 200,
@@ -103,16 +135,16 @@ export default async (req: Request, context: any) => {
     // Always include offline assistant
     list.push(...FALLBACK_OFFLINE_MODELS);
 
-    if (process.env.GEMINI_API_KEY) {
+    if (isKeyValid(process.env.GEMINI_API_KEY)) {
       list.push(...FALLBACK_GEMINI_MODELS);
     }
-    if (process.env.OPENROUTER_API_KEY) {
+    if (isKeyValid(process.env.OPENROUTER_API_KEY)) {
       list.push(...FALLBACK_OPENROUTER_MODELS);
     }
-    if (process.env.NVIDIA_API_KEY) {
+    if (isKeyValid(process.env.NVIDIA_API_KEY)) {
       list.push(...FALLBACK_NVIDIA_MODELS);
     }
-    if (process.env.GROQ_API_KEY) {
+    if (isKeyValid(process.env.GROQ_API_KEY)) {
       list.push(...FALLBACK_CUSTOM_MODELS);
     }
 
@@ -206,15 +238,16 @@ Your chat interface is running fully responsive. You can test code blocks, bulle
 
       // 2. Intercept Gemini mode
       if (providerId === "gemini") {
-        if (!process.env.GEMINI_API_KEY) {
-          return new Response(JSON.stringify({ error: "GEMINI_API_KEY is not configured on the server." }), {
+        if (!isKeyValid(process.env.GEMINI_API_KEY)) {
+          return new Response(JSON.stringify({ error: "GEMINI_API_KEY is not configured or is a placeholder." }), {
             status: 401,
             headers: { "Content-Type": "application/json", ...corsHeaders }
           });
         }
 
         const model = modelId || "gemini-3.5-flash";
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${process.env.GEMINI_API_KEY}`;
+        const cleanedGeminiKey = getCleanedKey(process.env.GEMINI_API_KEY);
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${cleanedGeminiKey}`;
 
         const payload = {
           contents: messages.map((m: any) => ({
@@ -309,13 +342,13 @@ Your chat interface is running fully responsive. You can test code blocks, bulle
       let baseEndpoint = "";
 
       if (providerId === "openrouter") {
-        apiKey = process.env.OPENROUTER_API_KEY || "";
+        apiKey = getCleanedKey(process.env.OPENROUTER_API_KEY);
         baseEndpoint = "https://openrouter.ai/api/v1/chat/completions";
       } else if (providerId === "nvidia") {
-        apiKey = process.env.NVIDIA_API_KEY || "";
+        apiKey = getCleanedKey(process.env.NVIDIA_API_KEY);
         baseEndpoint = "https://integrate.api.nvidia.com/v1/chat/completions";
       } else if (providerId === "generic-chat-completion-api") {
-        apiKey = process.env.GROQ_API_KEY || "";
+        apiKey = getCleanedKey(process.env.GROQ_API_KEY);
         baseEndpoint = "https://api.groq.com/openai/v1/chat/completions";
       } else {
         return new Response(JSON.stringify({ error: "Invalid provider selection." }), {
@@ -324,7 +357,7 @@ Your chat interface is running fully responsive. You can test code blocks, bulle
         });
       }
 
-      if (!apiKey) {
+      if (!isKeyValid(apiKey)) {
         return new Response(
           JSON.stringify({ error: `API key for ${providerId} is not configured on the server. Please check your Netlify environment variables.` }),
           {

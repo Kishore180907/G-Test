@@ -9,15 +9,54 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-// Initialize Google GenAI
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    }
+// Helper function to strip quotes and trim whitespaces from key values (common during copy-pasting to Netlify UI)
+function getCleanedKey(key: string | undefined): string {
+  if (!key) return "";
+  let cleaned = key.trim();
+  if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+    cleaned = cleaned.substring(1, cleaned.length - 1);
+  } else if (cleaned.startsWith("'") && cleaned.endsWith("'")) {
+    cleaned = cleaned.substring(1, cleaned.length - 1);
   }
-});
+  return cleaned.trim();
+}
+
+// Check if a key is formatted properly and not just a placeholder value from .env.example
+function isKeyValid(key: string | undefined): boolean {
+  const cleaned = getCleanedKey(key);
+  if (!cleaned) return false;
+  const lower = cleaned.toLowerCase();
+  if (
+    lower === "my_gemini_api_key" ||
+    lower === "my_openrouter_api_key" ||
+    lower === "my_nvidia_api_key" ||
+    lower === "my_groq_api_key" ||
+    lower === "my_app_url" ||
+    lower.startsWith("my_") ||
+    lower === "placeholder" ||
+    lower === "your_api_key"
+  ) {
+    return false;
+  }
+  return cleaned.length > 5;
+}
+
+// Lazy initializer for Google GenAI client
+function getGoogleGenAI(): GoogleGenAI {
+  const rawKey = process.env.GEMINI_API_KEY;
+  const cleaned = getCleanedKey(rawKey);
+  if (!isKeyValid(cleaned)) {
+    throw new Error("GEMINI_API_KEY is not configured or contains placeholder text.");
+  }
+  return new GoogleGenAI({
+    apiKey: cleaned,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
+    }
+  });
+}
 
 // Parsers
 app.use(express.json());
@@ -87,10 +126,10 @@ const FALLBACK_CUSTOM_MODELS = [
 // Health Check & Key Availability Status
 app.get("/api/status", (req, res) => {
   res.json({
-    openrouterConfigured: !!process.env.OPENROUTER_API_KEY,
-    nvidiaConfigured: !!process.env.NVIDIA_API_KEY,
-    groqConfigured: !!process.env.GROQ_API_KEY,
-    geminiConfigured: !!process.env.GEMINI_API_KEY
+    openrouterConfigured: isKeyValid(process.env.OPENROUTER_API_KEY),
+    nvidiaConfigured: isKeyValid(process.env.NVIDIA_API_KEY),
+    groqConfigured: isKeyValid(process.env.GROQ_API_KEY),
+    geminiConfigured: isKeyValid(process.env.GEMINI_API_KEY)
   });
 });
 
@@ -103,26 +142,26 @@ app.get("/api/models", async (req, res) => {
     list.push(...FALLBACK_OFFLINE_MODELS);
 
     // If Gemini key is configured, include official Gemini models
-    if (process.env.GEMINI_API_KEY) {
+    if (isKeyValid(process.env.GEMINI_API_KEY)) {
       list.push(...FALLBACK_GEMINI_MODELS);
     } else {
       console.log("[Models Config Check] GEMINI_API_KEY is not defined. Skipping Gemini models.");
     }
 
     // Filter list of models based on which keys are configured
-    if (process.env.OPENROUTER_API_KEY) {
+    if (isKeyValid(process.env.OPENROUTER_API_KEY)) {
       list.push(...FALLBACK_OPENROUTER_MODELS);
     } else {
       console.log("[Models Config Check] OPENROUTER_API_KEY is not defined. Skipping OpenRouter models.");
     }
 
-    if (process.env.NVIDIA_API_KEY) {
+    if (isKeyValid(process.env.NVIDIA_API_KEY)) {
       list.push(...FALLBACK_NVIDIA_MODELS);
     } else {
       console.log("[Models Config Check] NVIDIA_API_KEY is not defined. Skipping NVIDIA models.");
     }
 
-    if (process.env.GROQ_API_KEY) {
+    if (isKeyValid(process.env.GROQ_API_KEY)) {
       list.push(...FALLBACK_CUSTOM_MODELS);
     } else {
       console.log("[Models Config Check] GROQ_API_KEY is not defined. Skipping Groq models.");
@@ -203,10 +242,10 @@ Your chat interface is running fully responsive. You can test code blocks, bulle
   }
 
   if (providerId === "gemini") {
-    if (!process.env.GEMINI_API_KEY) {
-      console.warn(`[Proxy Chat Warning] GEMINI_API_KEY is not set.`);
+    if (!isKeyValid(process.env.GEMINI_API_KEY)) {
+      console.warn(`[Proxy Chat Warning] GEMINI_API_KEY is not configured or is placeholder.`);
       return res.status(401).json({ 
-        error: "GEMINI_API_KEY is not configured on the server. Please check your AI Studio secrets." 
+        error: "GEMINI_API_KEY is not configured on the server. Please check your secrets." 
       });
     }
 
@@ -219,7 +258,7 @@ Your chat interface is running fully responsive. You can test code blocks, bulle
         parts: [{ text: m.content }]
       }));
 
-      const responseStream = await ai.models.generateContentStream({
+      const responseStream = await getGoogleGenAI().models.generateContentStream({
         model: modelId || "gemini-3.5-flash",
         contents,
         config: {
@@ -264,14 +303,14 @@ Your chat interface is running fully responsive. You can test code blocks, bulle
   let baseEndpoint = "";
 
   if (providerId === "openrouter") {
-    apiKey = process.env.OPENROUTER_API_KEY || "";
+    apiKey = getCleanedKey(process.env.OPENROUTER_API_KEY);
     baseEndpoint = "https://openrouter.ai/api/v1/chat/completions";
   } else if (providerId === "nvidia") {
-    apiKey = process.env.NVIDIA_API_KEY || "";
+    apiKey = getCleanedKey(process.env.NVIDIA_API_KEY);
     baseEndpoint = "https://integrate.api.nvidia.com/v1/chat/completions";
   } else if (providerId === "generic-chat-completion-api") {
     // Read Groq API Key securely from server environment instead of browser body
-    apiKey = process.env.GROQ_API_KEY || "";
+    apiKey = getCleanedKey(process.env.GROQ_API_KEY);
     const custom = req.body.customModel || {};
     baseEndpoint = custom.base_url || "https://api.groq.com/openai/v1/chat/completions";
     if (baseEndpoint && !baseEndpoint.endsWith("/chat/completions")) {
@@ -282,10 +321,10 @@ Your chat interface is running fully responsive. You can test code blocks, bulle
     return res.status(400).json({ error: "Invalid provider selection." });
   }
 
-  if (!apiKey) {
-    console.warn(`[Proxy Chat Warning] API key for ${providerId} is not set. Blocked request.`);
+  if (!isKeyValid(apiKey)) {
+    console.warn(`[Proxy Chat Warning] API key for ${providerId} is not configured or is placeholder. Blocked request.`);
     return res.status(401).json({ 
-      error: `API key for ${providerId} is not set. Please configure it in your Secrets panel under AI Studio to chat.` 
+      error: `API key for ${providerId} is not configured on the server. Please check your environment variables.` 
     });
   }
 
