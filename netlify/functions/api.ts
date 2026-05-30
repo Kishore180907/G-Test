@@ -41,25 +41,6 @@ const FALLBACK_OFFLINE_MODELS = [
   }
 ];
 
-const FALLBACK_GEMINI_MODELS = [
-  { 
-    id: "gemini-3.5-flash", 
-    name: "Gemini 3.5 Flash", 
-    provider: "gemini" as const, 
-    description: "Google's latest ultra-fast, high-performance lightweight text generation model.", 
-    contextLength: 1048576, 
-    isFree: true 
-  },
-  { 
-    id: "gemini-3.1-pro-preview", 
-    name: "Gemini 3.1 Pro Preview", 
-    provider: "gemini" as const, 
-    description: "Google's premium reasoning model designed for complex technical, coding, and logical tasks.", 
-    contextLength: 2097152, 
-    isFree: true 
-  }
-];
-
 const FALLBACK_OPENROUTER_MODELS = [
   { id: "google/gemma-4-31b-it:free", name: "Gemma 4 31B IT (Free)", provider: "openrouter" as const, description: "Google's latest lightweight text generation model with incredible speed.", contextLength: 8192, isFree: true },
   { id: "liquid/lfm-2.5-1.2b-instruct:free", name: "Liquid LFM 1.2B Instruct (Free)", provider: "openrouter" as const, description: "An incredibly fast, highly optimized 1.2B model.", contextLength: 32768, isFree: true },
@@ -116,7 +97,7 @@ export default async (req: Request, context: any) => {
         openrouterConfigured: isKeyValid(process.env.OPENROUTER_API_KEY),
         nvidiaConfigured: isKeyValid(process.env.NVIDIA_API_KEY),
         groqConfigured: isKeyValid(process.env.GROQ_API_KEY),
-        geminiConfigured: isKeyValid(process.env.GEMINI_API_KEY)
+        geminiConfigured: false
       }),
       {
         status: 200,
@@ -135,9 +116,6 @@ export default async (req: Request, context: any) => {
     // Always include offline assistant
     list.push(...FALLBACK_OFFLINE_MODELS);
 
-    if (isKeyValid(process.env.GEMINI_API_KEY)) {
-      list.push(...FALLBACK_GEMINI_MODELS);
-    }
     if (isKeyValid(process.env.OPENROUTER_API_KEY)) {
       list.push(...FALLBACK_OPENROUTER_MODELS);
     }
