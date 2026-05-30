@@ -326,7 +326,17 @@ export default function App() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Error calling proxy stream completions.' }));
-        throw new Error(errorData.error || `Server responded with issue code ${response.status}`);
+        let finalErrorMsg = '';
+        if (errorData?.error) {
+          if (typeof errorData.error === 'object' && errorData.error !== null) {
+            finalErrorMsg = errorData.error.message || JSON.stringify(errorData.error);
+          } else {
+            finalErrorMsg = errorData.error;
+          }
+        } else {
+          finalErrorMsg = `Server responded with issue code ${response.status}`;
+        }
+        throw new Error(finalErrorMsg);
       }
 
       const reader = response.body?.getReader();
@@ -421,7 +431,10 @@ export default function App() {
 
     } catch (err: any) {
       console.error('Completion error: ', err);
-      setErrorMessage(`Streaming failed: ${err.message}`);
+      const errString = err instanceof Error 
+        ? err.message 
+        : (typeof err === 'object' && err !== null ? (err.message || JSON.stringify(err)) : String(err));
+      setErrorMessage(`Streaming failed: ${errString}`);
       
       // Update the assistant message with error state
       setSessions(prev => prev.map(s => {
@@ -432,7 +445,7 @@ export default function App() {
               if (m.id === assistantMsgId) {
                 return { 
                   ...m, 
-                  content: accumulatedContent || `ERROR: Failed to connect or fetch stream. ${err.message}`,
+                  content: accumulatedContent || `ERROR: Failed to connect or fetch stream. ${errString}`,
                   error: true 
                 };
               }
