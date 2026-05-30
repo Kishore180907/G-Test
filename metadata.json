@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Open-Source ChatGPT",
+  "description": "An open-source ChatGPT clone supporting multiple open models from providers like OpenRouter and NVIDIA NIM.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
