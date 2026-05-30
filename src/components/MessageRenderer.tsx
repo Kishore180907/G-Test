@@ -1,44 +1,50 @@
 import { useState } from 'react';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Terminal, FileCode, CheckSquare } from 'lucide-react';
+import { motion } from 'motion/react';
 
 interface MessageRendererProps {
   content: string;
 }
 
 export function MessageRenderer({ content }: MessageRendererProps) {
-  // Simple custom fast markdown block parser that is highly robust for streaming text
   const parts = parseMarkdown(content);
 
   return (
-    <div className="space-y-3 font-sans text-sm md:text-base leading-relaxed text-slate-100 select-text">
+    <div className="space-y-4 font-sans text-sm md:text-md leading-relaxed text-neutral-200 select-text font-normal">
       {parts.map((part, idx) => {
         if (part.type === 'code') {
           return (
-            <CodeBlock 
-              key={idx} 
-              language={part.language || 'code'} 
-              code={part.text} 
-            />
+            <div key={idx}>
+              <CodeBlock 
+                language={part.language || 'code'} 
+                code={part.text} 
+              />
+            </div>
           );
         } else if (part.type === 'header') {
           const level = part.level || 1;
-          const classes = level === 1 ? 'text-xl font-bold pt-2 text-white border-b border-slate-800 pb-1' :
-                          level === 2 ? 'text-lg font-bold pt-2 text-white' :
-                          'text-base font-semibold pt-1 text-slate-200';
-          return <p key={idx} className={classes}>{part.text}</p>;
+          const classes = level === 1 ? 'text-lg font-bold pt-3 pb-1 text-white border-b border-neutral-850/60 font-sans tracking-tight' :
+                          level === 2 ? 'text-md font-semibold pt-2 text-white font-sans' :
+                          'text-xs font-bold pt-1.5 uppercase tracking-wider text-neutral-300 font-sans';
+          return <h3 key={idx} className={classes}>{part.text}</h3>;
         } else if (part.type === 'list-item') {
           return (
-            <div key={idx} className="flex items-start pl-3 space-x-2 pt-0.5">
-              <span className="text-emerald-500 font-bold select-none">•</span>
-              <span className="flex-1 text-slate-200">
+            <motion.div 
+              key={idx} 
+              initial={{ opacity: 0, x: -4 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex items-start pl-1.5 space-x-2.5 pt-0.5"
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-purple-500/80 shrink-0 mt-2.5 select-none" />
+              <span className="flex-1 text-neutral-300">
                 {renderInlineFormatting(part.text)}
               </span>
-            </div>
+            </motion.div>
           );
         } else {
           // Standard text with inline formats
           return (
-            <p key={idx} className="text-slate-300 whitespace-pre-wrap leading-relaxed">
+            <p key={idx} className="text-neutral-300 whitespace-pre-wrap leading-relaxed">
               {renderInlineFormatting(part.text)}
             </p>
           );
@@ -48,8 +54,8 @@ export function MessageRenderer({ content }: MessageRendererProps) {
   );
 }
 
-// Subcomponents
-function CodeBlock({ language, code }: { language: string; code: string; key?: any }) {
+// Subcomponents with polished styling
+function CodeBlock({ language, code }: { language: string; code: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -58,34 +64,45 @@ function CodeBlock({ language, code }: { language: string; code: string; key?: a
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      console.error('Failed to copy text: ', err);
+      console.error('Failed to copy: ', err);
     }
   };
 
+  const isTerminal = ['bash', 'sh', 'shell', 'zsh', 'terminal'].includes(language.toLowerCase());
+
   return (
-    <div className="my-3 rounded-lg overflow-hidden border border-slate-800 bg-slate-950 font-mono text-xs md:text-sm shadow-lg">
-      <div className="flex items-center justify-between px-4 py-1.5 bg-slate-900 border-b border-slate-800 text-slate-400 font-sans select-none text-xs">
-        <span className="font-mono text-emerald-400 font-medium">{language.toLowerCase()}</span>
+    <div className="my-4 rounded-xl overflow-hidden border border-neutral-850 bg-[#070708] font-mono text-xs md:text-[13px] shadow-xl">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-neutral-900 border-b border-neutral-850 text-neutral-400 font-sans select-none text-[11px] font-medium font-sans">
+        <div className="flex items-center gap-2">
+          {isTerminal ? (
+            <Terminal className="w-3.5 h-3.5 text-neutral-500" />
+          ) : (
+            <FileCode className="w-3.5 h-3.5 text-purple-400/80" />
+          )}
+          <span className="lowercase font-semibold text-neutral-300 tracking-wide">{language || 'code'}</span>
+        </div>
+        
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 hover:text-white transition-colors duration-150 px-1.5 py-0.5 rounded hover:bg-slate-800"
-          title="Copy to clipboard"
+          className="flex items-center gap-1.5 hover:text-white transition-all duration-150 py-1 px-2 rounded-lg hover:bg-neutral-800 cursor-pointer select-none border border-transparent hover:border-neutral-700/40 text-[10.5px]"
+          title="Copy code snippet"
+          type="button"
         >
           {copied ? (
             <>
-              <Check className="w-3.5 h-3.5 text-emerald-500" />
-              <span className="text-emerald-500 font-medium">Copied</span>
+              <Check className="w-3 h-3 text-emerald-400" />
+              <span className="text-emerald-400 font-semibold">Copied!</span>
             </>
           ) : (
             <>
-              <Copy className="w-3.5 h-3.5" />
+              <Copy className="w-3 h-3 text-neutral-400" />
               <span>Copy</span>
             </>
           )}
         </button>
       </div>
-      <div className="p-4 overflow-x-auto text-emerald-50/90 whitespace-pre scrollbar-thin scrollbar-thumb-slate-800">
-        <code>{code}</code>
+      <div className="p-4 overflow-x-auto text-[#eceef0] whitespace-pre scrollbar-thin scrollbar-thumb-neutral-850 bg-[#070708]">
+        <code className="font-mono block select-all">{code}</code>
       </div>
     </div>
   );
@@ -166,14 +183,14 @@ function parseMarkdown(text: string): ParsedBlock[] {
       }
     }
 
-    // Regular line - let's group adjacent non-empty plain lines to keep paragraphs clean or keep separate if spaced
+    // Regular line
     blocks.push({
       type: 'text',
       text: line
     });
   }
 
-  // If stream closes midcode, ensure we render the open code blocks
+  // If stream closes midcode, render open code block cleanly
   if (inCode && currentCodeText.length > 0) {
     blocks.push({
       type: 'code',
@@ -182,10 +199,8 @@ function parseMarkdown(text: string): ParsedBlock[] {
     });
   }
 
-  // Clean empty lines at start/end unless consecutive
   return blocks.filter((b, idx) => {
     if (b.type === 'text' && b.text.trim() === '') {
-      // Allow single blank space occasionally but filter trailing noise
       if (idx === blocks.length - 1 || idx === 0) return false;
     }
     return true;
@@ -204,20 +219,20 @@ function renderInlineFormatting(text: string) {
       return (
         <code 
           key={idx} 
-          className="mx-1 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-xs font-mono text-emerald-300 select-all"
+          className="mx-1 px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-850 text-[12px] font-mono text-purple-355 text-purple-300 font-semibold select-all"
         >
           {part.substring(1, part.length - 1)}
         </code>
       );
     } else if (part.startsWith('**') && part.endsWith('**')) {
       return (
-        <strong key={idx} className="font-bold text-white">
+        <strong key={idx} className="font-extrabold text-white">
           {part.substring(2, part.length - 2)}
         </strong>
       );
     } else if (part.startsWith('*') && part.endsWith('*')) {
       return (
-        <em key={idx} className="italic text-slate-100">
+        <em key={idx} className="italic text-neutral-200">
           {part.substring(1, part.length - 1)}
         </em>
       );

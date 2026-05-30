@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Bot, 
   Sparkles, 
@@ -12,7 +12,18 @@ import {
   Cpu,
   RefreshCw,
   Clock,
-  ArrowDown
+  ArrowDown,
+  Keyboard,
+  Zap,
+  Activity,
+  Trash2,
+  Trash,
+  Check,
+  Terminal,
+  FileCode,
+  LineChart,
+  MessageSquare,
+  Bookmark
 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { ModelSelector } from './components/ModelSelector';
@@ -21,6 +32,52 @@ import { SettingsModal } from './components/SettingsModal';
 import { MessageRenderer } from './components/MessageRenderer';
 import { ChatSession, Message, Model, ProviderId, ServerConfigStatus } from './types';
 import { getOptimalModel } from './lib/router';
+import { motion, AnimatePresence } from 'motion/react';
+
+const SUGGESTED_CARDS = [
+  {
+    title: "Coding Workspace",
+    prompt: "Write a high-performance Express server-side route in TypeScript",
+    category: "Code",
+    description: "Write clean schemas, parse formats, or mock APIs.",
+    color: "from-purple-500/20 to-blue-500/20 text-purple-400"
+  },
+  {
+    title: "Technical Writing",
+    prompt: "Help me write an elegant marketing copy explaining open-source LLMs",
+    category: "Writing",
+    description: "Compose summaries, draft copies, or outline documents.",
+    color: "from-blue-500/20 to-indigo-500/20 text-blue-400"
+  },
+  {
+    title: "Deep Analysis & Tech",
+    prompt: "Compare the difference between OpenRouter and NVIDIA microservices",
+    category: "Explain",
+    description: "Examine infrastructure layers, specs, or benchmark reports.",
+    color: "from-indigo-500/20 to-violet-500/20 text-indigo-400"
+  },
+  {
+    title: "Data Operations",
+    prompt: "Help me write a Python script to filter and summarize CSV columns",
+    category: "Data",
+    description: "Analyze stats, formulate math equations, or parse lists.",
+    color: "from-pink-500/20 to-rose-500/20 text-pink-400"
+  },
+  {
+    title: "Marketing Campaign",
+    prompt: "Craft a social media plan outline for launching an offline-first mobile app",
+    category: "Marketing",
+    description: "Design social copy, newsletter headlines, or brand ideas.",
+    color: "from-orange-500/20 to-amber-500/20 text-amber-400"
+  },
+  {
+    title: "Strategic Blueprint",
+    prompt: "Compare SaaS pricing tiers and design a tier-based expansion model",
+    category: "Business",
+    description: "Brainstorm strategic pillars, tiers, or expansion indexes.",
+    color: "from-emerald-500/20 to-teal-500/20 text-emerald-400"
+  }
+];
 
 export default function App() {
   // Session history loading with safe localStorage parsing
@@ -50,15 +107,23 @@ export default function App() {
   // Layout UI states
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   
+  // Real-time rolling generation timer state
+  const [streamDuration, setStreamDuration] = useState<number>(0);
+  const streamTimerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [lastResponseTime, setLastResponseTime] = useState<number | null>(null);
+
   // Model catalog list state
   const [models, setModels] = useState<Model[]>([]);
   const [status, setStatus] = useState<ServerConfigStatus>({
     openrouterConfigured: false,
-    nvidiaConfigured: false
+    nvidiaConfigured: false,
+    groqConfigured: false,
+    geminiConfigured: false
   });
 
   // Current selected model
@@ -127,7 +192,6 @@ export default function App() {
         
         // Select an initial default model if none is selected
         if (data.length > 0) {
-          // Prefer a free model if available
           const freeModel = data.find(m => m.isFree);
           const initialModel = freeModel || data[0];
           setActiveModelId(initialModel.id);
@@ -144,9 +208,11 @@ export default function App() {
   };
 
   // Setup active session details
-  const activeSession = sessions.find(s => s.id === activeSessionId);
+  const activeSession = useMemo(() => {
+    return sessions.find(s => s.id === activeSessionId);
+  }, [sessions, activeSessionId]);
 
-  // If a session has no model selected, or when model selection switches, sync active session parameters
+  // Sync parameters when active session swaps
   useEffect(() => {
     if (activeSession) {
       setActiveModelId(activeSession.modelId);
@@ -157,12 +223,40 @@ export default function App() {
     }
   }, [activeSessionId]);
 
+  // Create keyboard shortcut listeners
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Esc: dismiss modal Dialogues
+      if (e.key === 'Escape') {
+        setIsSettingsOpen(false);
+        setIsShortcutsOpen(false);
+      }
+      // Ctrl + , or Cmd + , : Tuning Modal
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        setIsSettingsOpen(true);
+      }
+      // Ctrl + / or Cmd + / : Shortcuts list modal
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault();
+        setIsShortcutsOpen(prev => !prev);
+      }
+      // Ctrl + K or Cmd + K : trigger New Chat thread
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        handleNewSession();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [sessions, activeSessionId, activeModelId, activeProviderId, systemPrompt, temperature, maxTokens]);
+
   // Create a new session
   const handleNewSession = (initialMsg?: string) => {
     const id = `session-${Date.now()}`;
     const newSession: ChatSession = {
       id,
-      title: initialMsg ? (initialMsg.length > 30 ? `${initialMsg.substring(0, 30)}...` : initialMsg) : 'New chat thread',
+      title: initialMsg ? (initialMsg.length > 25 ? `${initialMsg.substring(0, 25)}...` : initialMsg) : 'New chat thread',
       modelId: activeModelId || 'google/gemma-4-31b-it:free',
       providerId: activeProviderId || 'openrouter',
       systemPrompt,
@@ -211,12 +305,12 @@ export default function App() {
   const handleScroll = () => {
     if (chatContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 200;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
       setShowScrollBottom(!isNearBottom && scrollHeight > clientHeight);
     }
   };
 
-  // Handle key triggers on mount and during message additions
+  // Move to bottom on session changes
   useEffect(() => {
     scrollToBottom('instant');
   }, [activeSessionId]);
@@ -243,7 +337,7 @@ export default function App() {
       sessionId = handleNewSession(userMessageText);
       currentSession = {
         id: sessionId,
-        title: userMessageText.substring(0, 30) + (userMessageText.length > 30 ? '...' : ''),
+        title: userMessageText.substring(0, 25) + (userMessageText.length > 25 ? '...' : ''),
         modelId: modelToUse,
         providerId: providerToUse,
         systemPrompt,
@@ -254,7 +348,6 @@ export default function App() {
         updatedAt: Date.now()
       };
     } else {
-      // Keep session model attributes synced if routing selection shifted
       if (routingMode !== 'manual' || currentSession.modelId !== activeModelId || currentSession.providerId !== activeProviderId) {
         currentSession.modelId = modelToUse;
         currentSession.providerId = providerToUse;
@@ -297,13 +390,19 @@ export default function App() {
       return s;
     }));
 
-    // Trigger immediate page follow scroll down
     setTimeout(() => scrollToBottom('smooth'), 50);
 
     setIsStreaming(true);
+    setLastResponseTime(null);
+    setStreamDuration(0);
+
+    // Start precision rolling timer
+    const pStart = performance.now();
+    streamTimerIntervalRef.current = setInterval(() => {
+      setStreamDuration(parseFloat(((performance.now() - pStart) / 1000).toFixed(1)));
+    }, 100);
 
     let accumulatedContent = '';
-
     const matchingModel = models.find(m => m.id === modelToUse && m.provider === providerToUse);
     const customModelInfo = matchingModel?.customModel;
 
@@ -352,11 +451,8 @@ export default function App() {
         const { value, done } = await reader.read();
         if (done) break;
 
-        // Feed buffer
         streamBuffer += decoder.decode(value, { stream: true });
         const lines = streamBuffer.split('\n');
-        
-        // Keep potential half-line for the next decode alignment block
         streamBuffer = lines.pop() || '';
 
         for (const line of lines) {
@@ -368,12 +464,10 @@ export default function App() {
             const dataStr = trimmed.substring(6);
             try {
               const parsed = JSON.parse(dataStr);
-              // Extract content delta (OpenAI streaming format compatibility)
               const chunkContent = parsed.choices?.[0]?.delta?.content || '';
               if (chunkContent) {
                 accumulatedContent += chunkContent;
                 
-                // Update specific assistant message state incrementally
                 setSessions(prev => prev.map(s => {
                   if (s.id === sessionId) {
                     return {
@@ -390,13 +484,12 @@ export default function App() {
                 }));
               }
             } catch (err) {
-              // Gracefully bypass line parse errors from stream pacing cuts
+              // Bypassed parsing lines error
             }
           }
         }
       }
 
-      // Ensure buffer trails are fully read
       if (streamBuffer.startsWith('data: ')) {
         try {
           const parsed = JSON.parse(streamBuffer.substring(6));
@@ -407,12 +500,15 @@ export default function App() {
         } catch {}
       }
 
-      // Finish streaming and update title if it was a default title and is first message exchange
+      // Finish Timer calculation
+      const durationTotal = parseFloat(((performance.now() - pStart) / 1000).toFixed(2));
+      setLastResponseTime(durationTotal);
+
       setSessions(prev => prev.map(s => {
         if (s.id === sessionId) {
           const isDefaultTitle = s.title === 'New chat thread' || s.title.startsWith('New chat thread');
           const finalTitle = isDefaultTitle 
-            ? (userMessageText.length > 30 ? `${userMessageText.substring(0, 30)}...` : userMessageText)
+            ? (userMessageText.length > 25 ? `${userMessageText.substring(0, 25)}...` : userMessageText)
             : s.title;
 
           return {
@@ -436,7 +532,6 @@ export default function App() {
         : (typeof err === 'object' && err !== null ? (err.message || JSON.stringify(err)) : String(err));
       setErrorMessage(`Streaming failed: ${errString}`);
       
-      // Update the assistant message with error state
       setSessions(prev => prev.map(s => {
         if (s.id === sessionId) {
           return {
@@ -445,7 +540,7 @@ export default function App() {
               if (m.id === assistantMsgId) {
                 return { 
                   ...m, 
-                  content: accumulatedContent || `ERROR: Failed to connect or fetch stream. ${errString}`,
+                  content: accumulatedContent || `ERROR: Failed to connect stream. ${errString}`,
                   error: true 
                 };
               }
@@ -457,11 +552,14 @@ export default function App() {
       }));
     } finally {
       setIsStreaming(false);
-      setTimeout(() => scrollToBottom('smooth'), 100);
+      if (streamTimerIntervalRef.current) {
+        clearInterval(streamTimerIntervalRef.current);
+        streamTimerIntervalRef.current = null;
+      }
+      setTimeout(() => scrollToBottom('smooth'), 120);
     }
   };
 
-  // Handle updating model settings on dynamic swaps
   const handleModelSelect = (modelId: string, providerId: ProviderId) => {
     setActiveModelId(modelId);
     setActiveProviderId(providerId);
@@ -481,7 +579,7 @@ export default function App() {
     }
   };
 
-  // Sync hyperparams to active session on changes
+  // Sync hyperparams
   const handleUpdateSystemPrompt = (prompt: string) => {
     setSystemPrompt(prompt);
     if (activeSession) {
@@ -518,16 +616,34 @@ export default function App() {
     }
   };
 
-  const selectedModelObj = models.find(m => m.id === activeModelId && m.provider === activeProviderId) || {
-    id: activeModelId,
-    name: activeModelId.split('/').pop()?.toUpperCase() || activeModelId || 'Select Model',
-    provider: activeProviderId,
-    isFree: activeModelId.endsWith(':free')
-  };
+  const selectedModelObj = useMemo(() => {
+    return models.find(m => m.id === activeModelId && m.provider === activeProviderId) || {
+      id: activeModelId,
+      name: activeModelId.split('/').pop()?.toUpperCase() || activeModelId || 'Select Model',
+      provider: activeProviderId,
+      isFree: activeModelId.endsWith(':free')
+    };
+  }, [models, activeModelId, activeProviderId]);
+
+  // Total session stats calculations
+  const activeSessionStats = useMemo(() => {
+    if (!activeSession) return { count: 0, chars: 0, tokens: 0 };
+    let chars = 0;
+    activeSession.messages.forEach(m => chars += m.content.length);
+    const tokens = Math.ceil(chars / 4);
+    return {
+      count: activeSession.messages.length,
+      chars,
+      tokens
+    };
+  }, [activeSession]);
+
+  const hasConfiguredKeys = status.openrouterConfigured || status.nvidiaConfigured || status.groqConfigured;
 
   return (
-    <div className="flex h-screen bg-slate-910 overflow-hidden font-sans text-slate-100" id="main-app-container">
-      {/* Sidebar history Drawer */}
+    <div className="flex h-screen bg-[#070708] overflow-hidden font-sans text-neutral-200 select-none antialiased" id="main-app-container">
+      
+      {/* Sidebar Thread Navigation */}
       <div className={`fixed inset-y-0 left-0 z-40 transition-transform duration-300 md:static ${
         isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:hidden'
       }`}>
@@ -553,27 +669,34 @@ export default function App() {
       </div>
 
       {/* Backdrop overlay for mobile drawer */}
-      {isSidebarOpen && (
-        <div 
-          onClick={() => setIsSidebarOpen(false)}
-          className="bg-black/60 fixed inset-0 z-30 md:hidden backdrop-blur-xs"
-          aria-hidden="true"
-        />
-      )}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarOpen(false)}
+            className="bg-black/80 fixed inset-0 z-30 md:hidden backdrop-blur-xs"
+            aria-hidden="true"
+          />
+        )}
+      </AnimatePresence>
 
-      {/* Main chat workspace */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-900" id="chat-workspace">
-        {/* Top Navbar */}
-        <header className="flex items-center justify-between border-b border-slate-800 bg-slate-950/70 py-3.5 px-4 md:px-6 shrink-0 z-10 select-none">
+      {/* Main chat workspace area */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0a0a0b]" id="chat-workspace">
+        
+        {/* Top bar navbar */}
+        <header className="flex items-center justify-between border-b border-neutral-900 bg-[#070708]/75 py-3 px-4 md:px-6 shrink-0 z-10">
           <div className="flex items-center gap-3">
-            {/* Sidebar toggle */}
+            {/* Sidebar toggle button */}
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-              aria-label="Toggle Sidebar"
+              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-900 transition-all cursor-pointer border border-transparent hover:border-neutral-850"
+              aria-label="Toggle Navigation Sidebar"
               id="sidebar-toggle-btn"
+              type="button"
             >
-              {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {isSidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </button>
 
             {/* Selector wrapper */}
@@ -591,158 +714,201 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Tuning control button */}
+            {/* Systems active telemetry dot */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-neutral-900 bg-neutral-900/10 text-neutral-400 text-[10px] font-bold tracking-wider">
+              <span className={`w-1.5 h-1.5 rounded-full ${hasConfiguredKeys ? 'bg-emerald-500 animate-pulse' : 'bg-purple-500'}`} />
+              <span className="uppercase">{hasConfiguredKeys ? 'API Gateways Online' : 'Systems Active (Demo)'}</span>
+            </div>
+
+            {/* Keyboard Shortcuts Trigger Button */}
+            <button
+              onClick={() => setIsShortcutsOpen(true)}
+              className="p-1.5 rounded-xl border border-neutral-900 bg-[#0d0d0e]/50 text-neutral-400 hover:text-white transition-all cursor-pointer hover:border-neutral-800"
+              title="View Keyboard Shortcuts"
+              id="shortcuts-trigger-btn"
+              type="button"
+            >
+              <Keyboard className="w-4 h-4" />
+            </button>
+
+            {/* Tuning parameter controls */}
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-800 hover:border-slate-700 bg-slate-900/60 hover:bg-slate-900 text-slate-300 hover:text-white transition-all text-xs font-semibold cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-neutral-900 hover:border-neutral-800 bg-[#0d0d0e]/50 hover:bg-neutral-905 text-neutral-300 hover:text-white transition-all text-xs font-semibold cursor-pointer"
               id="settings-trigger-btn"
+              type="button"
             >
-              <Settings className="w-4 h-4 text-emerald-400" />
+              <Settings className="w-3.5 h-3.5 text-purple-400" />
               <span className="hidden sm:inline">Parameters</span>
             </button>
           </div>
         </header>
 
-        {/* Global Warnings Banner */}
+        {/* Global Warnings Panel */}
         {errorMessage && (
-          <div className="bg-rose-950/40 border-b border-rose-900/40 px-6 py-2.5 flex items-center gap-3 text-rose-300 text-xs text-center justify-center animate-in fade-in duration-200">
-            <Info className="w-4 h-4 text-rose-500 shrink-0" />
+          <div className="bg-red-950/20 border-b border-red-900/30 px-6 py-2.5 flex items-center gap-3 text-red-300 text-xs text-center justify-center animate-in slide-in-from-top-1">
+            <Info className="w-4 h-4 text-red-400 shrink-0 animate-pulse" />
             <p className="font-semibold leading-normal">{errorMessage}</p>
           </div>
         )}
 
-        {/* API warning for unconfigured setup */}
-        {!status.openrouterConfigured && !status.nvidiaConfigured && !status.groqConfigured && !status.geminiConfigured && (
-          <div className="bg-amber-955/20 border-b border-amber-900/35 px-6 py-3 flex flex-wrap gap-x-4 gap-y-1.5 items-center justify-center text-amber-200 text-xs text-center select-none">
-            <span className="flex items-center gap-1.5 font-bold">
-              <KeyRound className="w-4 h-4 text-amber-400" />
-              API Key Config Optional
-            </span>
-            <p className="leading-normal max-w-xl">
-              Currently running in **Demo Mode**. Configure your API keys in the **Secrets** panel in the AI Studio UI as **`GEMINI_API_KEY`**, **`OPENROUTER_API_KEY`**, **`NVIDIA_API_KEY`**, or **`GROQ_API_KEY`** to access all live models.
-            </p>
-          </div>
-        )}
-
-        {/* Messaging Area */}
+        {/* Messaging & Canvas viewport */}
         <div 
           ref={chatContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto px-4 py-8 md:p-8 space-y-6 scrollbar-thin scrollbar-thumb-slate-950/40"
+          className="flex-1 overflow-y-auto px-4 py-6 md:p-8 space-y-6 scrollbar-thin scrollbar-thumb-neutral-900"
           id="chat-feed-box"
         >
           {!activeSession || activeSession.messages.length === 0 ? (
-            /* Blank slate template greeting card */
-            <div className="max-w-2xl mx-auto py-16 text-center space-y-8 select-none">
-              <div className="inline-flex p-4 rounded-3xl bg-emerald-950/50 border border-emerald-800/40 text-emerald-400 shadow-xl shadow-emerald-950/20">
-                <Bot className="w-12 h-12" />
-              </div>
+            
+            /* EMPTY STATE SCREEN - AURA REDESIGN */
+            <div className="max-w-2xl mx-auto py-12 md:py-20 text-center space-y-8 select-none">
               
-              <div className="space-y-3">
-                <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-white font-sans">
-                  Open-Source ChatGPT
-                </h2>
-                <p className="text-slate-400 text-sm max-w-md mx-auto leading-relaxed">
-                  A high-performance full-stack completion environment proxying OpenRouter and NVIDIA NIM APIs in real-time.
-                </p>
-              </div>
-
-              {/* Status checklist metrics */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg mx-auto pt-4 text-left">
-                <div className="p-4 rounded-2xl border border-slate-800/80 bg-slate-950/35 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${status.geminiConfigured ? 'bg-purple-500 animate-pulse' : 'bg-slate-600'}`} />
-                    <span className="text-xs font-bold text-slate-100 uppercase tracking-wider">Google Gemini API</span>
-                  </div>
-                  <p className="text-xs text-slate-400 leading-normal">
-                    {status.geminiConfigured 
-                      ? "Connected! Google's premium Gemini 3.5 & 3.1 models are fully live."
-                      : "Using fallback demo mode. Please configure your key to unleash official Google models."}
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.92 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.55, ease: 'easeOut' }}
+                className="space-y-4"
+              >
+                {/* Central Sparkling custom AI mark */}
+                <div className="relative inline-flex items-center justify-center p-5 rounded-3xl bg-neutral-900/30 border border-neutral-850 shadow-2xl relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/10 via-blue-500/10 to-indigo-500/10 animate-pulse" />
+                  <Sparkles className="w-10 h-10 text-purple-400" />
+                </div>
+                
+                <div className="space-y-2">
+                  <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white leading-tight">
+                    How can I help you today?
+                  </h2>
+                  <p className="text-neutral-500 text-xs md:text-sm max-w-md mx-auto leading-relaxed">
+                    Welcome to Aura Workspace. Type your question or choose one of the quick start action cards to test prompts.
                   </p>
                 </div>
+              </motion.div>
 
-                <div className="p-4 rounded-2xl border border-slate-800/80 bg-slate-950/35 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${status.openrouterConfigured ? 'bg-emerald-500' : 'bg-slate-600'}`} />
-                    <span className="text-xs font-bold text-slate-100 uppercase tracking-wider">OpenRouter API</span>
-                  </div>
-                  <p className="text-xs text-slate-400 leading-normal">
-                    {status.openrouterConfigured 
-                      ? "Connected! High-performance OSS models are loaded and streaming."
-                      : "Unconfigured. Add key to Secrets to deploy massive open weights directory."}
-                  </p>
-                </div>
+              {/* Suggestions Prompt Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 max-w-4xl mx-auto pt-4 text-left">
+                {SUGGESTED_CARDS.map((card, idx) => (
+                  <motion.button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSelectSuggestedPrompt(card.prompt)}
+                    whileHover={{ scale: 1.015, y: -2 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="p-4 rounded-xl border border-neutral-900 hover:border-neutral-800 bg-[#0a0a0b]/40 hover:bg-neutral-900/30 text-left transition-all duration-200 cursor-pointer space-y-2 group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">{card.category}</span>
+                      <div className={`w-1.5 h-1.5 rounded-full bg-gradient-to-tr ${card.color} opacity-80 group-hover:opacity-100 transition-opacity`} />
+                    </div>
+                    <h4 className="text-xs font-bold text-neutral-200 group-hover:text-white transition-colors">{card.title}</h4>
+                    <p className="text-[10.5px] text-neutral-500 leading-normal line-clamp-2">{card.description}</p>
+                  </motion.button>
+                ))}
               </div>
+
+              {/* Subtle cluster metrics label */}
+              <div className="pt-2 select-none">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-neutral-900/60 bg-[#0d0d0e]/30 text-neutral-500 text-[10px] font-mono leading-none">
+                  <Activity className="w-3 h-3 text-emerald-500 animate-pulse" />
+                  <span>Secure Node: {selectedModelObj.provider || 'offline'} active proxy route</span>
+                </span>
+              </div>
+
             </div>
           ) : (
-            /* Chat feed */
+            
+            /* CHAT MESSAGE FEED WRAPPER */
             <div className="max-w-3xl mx-auto space-y-6">
-              {activeSession.messages.map((m) => {
+              {activeSession.messages.map((m, idx) => {
                 const isUser = m.role === 'user';
                 return (
-                  <div 
+                  <motion.div 
                     key={m.id} 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: Math.min(idx * 0.05, 0.2) }}
                     className={`flex items-start gap-4 ${isUser ? 'justify-end' : 'justify-start'}`}
                     id={`message-container-${m.id}`}
                   >
                     {!isUser && (
-                      <div className={`p-1.5 rounded-xl mt-1 shrink-0 ${
+                      <div className={`p-1.5 rounded-xl mt-1 shrink-0 bg-neutral-900 border border-neutral-850 shadow-md ${
                         m.providerUsed === 'nvidia' 
-                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/50' 
-                          : 'bg-indigo-950 text-indigo-400 border border-indigo-800/50'
+                          ? 'text-emerald-450 border-emerald-900/30' 
+                          : 'text-purple-450 border-purple-900/30'
                       }`}>
-                        <Bot className="w-4 h-4 md:w-5 md:h-5 text-emerald-400" />
+                        <Bot className="w-4 h-4 md:w-4.5 md:h-4.5" />
                       </div>
                     )}
 
-                    <div className={`max-w-[85%] md:max-w-[77%] rounded-2xl px-4 py-3 md:px-5 md:py-3.5 shadow-md ${
+                    <div className={`max-w-[88%] md:max-w-[78%] rounded-2xl px-4 py-3.5 md:px-5.5 md:py-4 shadow-xl relative ${
                       isUser 
-                        ? 'bg-emerald-600 border border-emerald-500 text-white rounded-tr-none' 
+                        ? 'bg-[#111112] border border-neutral-850 text-white rounded-tr-none' 
                         : m.error 
-                          ? 'bg-rose-950/30 border border-rose-900/50 text-rose-200'
-                          : 'bg-slate-950/80 border border-slate-800/50 text-slate-100 rounded-tl-none'
+                          ? 'bg-red-950/20 border border-red-900/40 text-red-300'
+                          : 'bg-[#0d0d0e]/95 border border-neutral-900 text-neutral-200 rounded-tl-none'
                     }`}>
-                      {/* Message metadata details */}
+                      
+                      {/* Telemetry metadata tags for Assistant responses */}
                       {!isUser && (
-                        <div className="flex items-center gap-1.5 text-[9px] font-mono font-bold text-slate-400 uppercase tracking-wider mb-2 pb-1 border-b border-slate-800/40 select-none">
-                          <span>{m.modelUsed?.split('/').pop() || 'Model'}</span>
+                        <div className="flex items-center gap-2 text-[9px] font-medium font-mono text-neutral-500 uppercase tracking-widest mb-3 pb-1.5 border-b border-neutral-900/50 select-none">
+                          <span className="text-neutral-450 font-bold">{m.modelUsed?.split('/').pop() || 'Aura Agent'}</span>
                           <span>•</span>
                           <span>
                             {m.providerUsed === 'nvidia' 
                               ? 'NVIDIA NIM' 
-                              : m.providerUsed === 'gemini'
-                                ? 'Google Gemini'
-                                : m.providerUsed === 'offline'
-                                  ? 'Offline Demo'
-                                  : m.providerUsed === 'generic-chat-completion-api'
-                                    ? 'Custom (Groq)'
-                                    : 'OpenRouter'}
+                              : m.providerUsed === 'offline'
+                                ? 'Demo SIM'
+                                : m.providerUsed === 'generic-chat-completion-api'
+                                  ? 'GROQ API'
+                                  : 'OpenRouter'}
                           </span>
                           {m.wasAutoRouted && (
                             <>
                               <span>•</span>
-                              <span className="flex items-center gap-0.5 text-amber-450 bg-amber-955/20 border border-amber-900/40 px-1 py-0.5 rounded font-extrabold text-[8.5px]">
-                                <Sparkles className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                              <span className="flex items-center gap-0.5 text-purple-400 bg-purple-950/20 border border-purple-905 px-1 rounded font-black text-[8px]">
+                                <Sparkles className="w-2.5 h-2.5" />
                                 Smart Routed
                               </span>
                             </>
                           )}
-                          {isStreaming && m.content === '' && (
-                            <span className="text-emerald-400 animate-pulse font-sans ml-auto">Thinking...</span>
+                          
+                          {/* Live rolling streaming indicator */}
+                          {isStreaming && idx === activeSession.messages.length - 1 && (
+                            <span className="ml-auto inline-flex items-center gap-1.5 text-purple-400 font-bold animate-pulse text-[8.5px]">
+                              <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                              <span>Generating {streamDuration}s</span>
+                            </span>
+                          )}
+
+                          {/* Completed stats timing */}
+                          {!isStreaming && idx === activeSession.messages.length - 1 && lastResponseTime && (
+                            <span className="ml-auto text-neutral-500 text-[8.5px]">
+                              Took {lastResponseTime}s
+                            </span>
                           )}
                         </div>
                       )}
 
-                      {/* Content block */}
+                      {/* Content parsing block */}
                       <MessageRenderer content={m.content} />
                       
-                      {/* Message Footer stats */}
-                      <div className="flex items-center justify-end text-[9px] font-mono text-slate-500 mt-2 select-none">
-                        <Clock className="w-2.5 h-2.5 mr-1" />
-                        <span>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      {/* Footer telemetry details (estimate length / timestamp) */}
+                      <div className="flex items-center justify-between text-[9px] font-mono font-medium text-neutral-600 mt-3 select-none">
+                        <span className="flex items-center gap-1 uppercase tracking-wide">
+                          <span>{m.content.length} Character{(m.content.length === 1 ? '' : 's')}</span>
+                          <span>•</span>
+                          <span>{Math.ceil(m.content.length / 4)} EST. Tokens</span>
+                        </span>
+                        
+                        <span className="flex items-center font-bold">
+                          <Clock className="w-2.5 h-2.5 mr-0.5" />
+                          <span>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </span>
                       </div>
+
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
               <div ref={messagesEndRef} />
@@ -750,20 +916,21 @@ export default function App() {
           )}
         </div>
 
-        {/* Floater arrow back to bottom */}
+        {/* Back-to-bottom hover floater button */}
         {showScrollBottom && (
           <button
             onClick={() => scrollToBottom()}
-            className="fixed bottom-28 md:bottom-24 right-6 md:right-8 p-2.5 rounded-xl bg-slate-955 border border-slate-800 text-slate-400 hover:text-white shadow-xl hover:bg-slate-900 transition-colors z-20 cursor-pointer animate-bounce select-none"
-            title="Scroll to bottom"
+            className="fixed bottom-26 right-6 md:right-8 p-2.5 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white shadow-2xl hover:bg-neutral-850 transition-all z-20 cursor-pointer animate-none select-none hover:scale-105 active:scale-95"
+            title="Scroll to bottom of chat history"
             id="scroll-bottom-floater"
+            type="button"
           >
-            <ArrowDown className="w-4 h-4" />
+            <ArrowDown className="w-4 h-4 animate-bounce" />
           </button>
         )}
 
-        {/* Quick input console */}
-        <div className="p-4 md:p-6 bg-gradient-to-t from-slate-950/85 to-transparent shrink-0">
+        {/* Main query input console footer layout panel */}
+        <div className="p-4 md:p-6 bg-gradient-to-t from-neutral-950/90 to-transparent shrink-0">
           <ChatInput
             onSend={handleSendMessage}
             isStreaming={isStreaming}
@@ -773,7 +940,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Settings Panel parameters slider drawer modal */}
+      {/* Model Parameter configuration modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -784,6 +951,82 @@ export default function App() {
         maxTokens={maxTokens}
         setMaxTokens={handleUpdateMaxTokens}
       />
+
+      {/* KEYBOARD SHORTCUT HELPER LIST MODAL */}
+      <AnimatePresence>
+        {isShortcutsOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <div className="absolute inset-0 cursor-default" onClick={() => setIsShortcutsOpen(false)} />
+            
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-md overflow-hidden rounded-2xl border border-neutral-900 bg-neutral-950 shadow-2xl relative z-10 font-sans p-6 text-left"
+            >
+              <div className="flex items-center justify-between border-b border-neutral-900 pb-4 mb-4 select-none">
+                <div className="flex items-center gap-2">
+                  <Keyboard className="w-4.5 h-4.5 text-purple-400" />
+                  <h3 className="text-sm font-bold text-white tracking-tight">Keyboard Workspace Shortcuts</h3>
+                </div>
+                <button
+                  onClick={() => setIsShortcutsOpen(false)}
+                  className="rounded-lg p-1 hover:bg-neutral-900 text-neutral-400 hover:text-white cursor-pointer select-none"
+                  type="button"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3.5 select-none text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-400 font-medium">New Workspace Thread</span>
+                  <div className="flex items-center gap-1">
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">Ctrl</kbd>
+                    <span className="text-neutral-500 font-semibold">+</span>
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">K</kbd>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-400 font-medium">Tuning Parameters Selector</span>
+                  <div className="flex items-center gap-1">
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">Ctrl</kbd>
+                    <span className="text-neutral-500 font-semibold">+</span>
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">,</kbd>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-400 font-medium">Open / Dismiss Shortcuts Modal</span>
+                  <div className="flex items-center gap-1">
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">Ctrl</kbd>
+                    <span className="text-neutral-500 font-semibold">+</span>
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">/</kbd>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-neutral-900 pt-3 mt-3.5">
+                  <span className="text-neutral-400 font-medium">Auto-scroll Active Feed</span>
+                  <div className="flex items-center gap-1">
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">Esc</kbd>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 text-center select-none pt-2 border-t border-neutral-900">
+                <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold">Press escape to dismiss modal</span>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
+
+  // Helper handle prompt card selects
+  function handleSelectSuggestedPrompt(promptText: string) {
+    handleSendMessage(promptText);
+  }
 }

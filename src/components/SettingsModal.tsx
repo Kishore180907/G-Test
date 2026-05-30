@@ -1,4 +1,5 @@
-import { Sliders, X, RotateCcw, ShieldCheck } from 'lucide-react';
+import { Sliders, X, RotateCcw, ShieldCheck, HelpCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -30,56 +31,67 @@ export function SettingsModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div 
-        className="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl transition-all"
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+      {/* Background close overlay */}
+      <div className="absolute inset-0 cursor-default" onClick={onClose} />
+
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 15 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 15 }}
+        transition={{ duration: 0.2 }}
+        className="w-full max-w-lg overflow-hidden rounded-2xl border border-neutral-900 bg-neutral-950 shadow-2xl relative z-10 font-sans"
         id="settings-modal"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950/55 px-6 py-4">
-          <div className="flex items-center gap-2">
-            <Sliders className="w-5 h-5 text-emerald-400" />
-            <h2 className="text-lg font-bold text-white tracking-wide">Model Parameters</h2>
+        <div className="flex items-center justify-between border-b border-neutral-900 bg-neutral-950 px-6 py-4.5 select-none animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <Sliders className="w-4.5 h-4.5 text-purple-400" />
+            <h2 className="text-sm font-bold text-white tracking-tight">Configuration Parameters</h2>
           </div>
           <button 
+            type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors duration-150"
+            className="rounded-lg p-1.5 text-neutral-400 hover:bg-neutral-900 hover:text-white transition-all duration-150 cursor-pointer select-none border border-transparent hover:border-neutral-800"
             aria-label="Close settings"
             id="close-settings-btn"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Form Body */}
-        <div className="p-6 space-y-6">
-          {/* System Prompt */}
+        <div className="p-6 space-y-5.5 text-left">
+          {/* System Instruction */}
           <div className="space-y-2">
-            <label className="block text-sm font-semibold text-slate-300">System Instruction</label>
-            <p className="text-xs text-slate-400">
-              Steer the model's persona, core limits, response length, language, or tone.
+            <div className="flex items-center justify-between select-none">
+              <label className="block text-xs font-bold text-neutral-300 uppercase tracking-wider">System Role Instructions</label>
+              <HelpCircle className="w-3.5 h-3.5 text-neutral-500 cursor-help" title="These instructions control the voice, level of detail, and behavior constraints of the AI." />
+            </div>
+            <p className="text-[11px] text-neutral-500 leading-normal select-none">
+              Determine the custom persona, response lengths, language preferences, or guardrails of answers.
             </p>
             <textarea
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
-              className="w-full min-h-[100px] rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm text-slate-200 placeholder-slate-600 focus:border-emerald-500/80 focus:ring-1 focus:ring-emerald-500/80 outline-none transition-all duration-150 font-sans"
-              placeholder="e.g. You are a senior software engineer who writes robust and clean Typescript code..."
+              className="w-full min-h-[105px] rounded-xl border border-neutral-900 bg-neutral-900/40 px-3.5 py-3 text-xs text-neutral-200 placeholder-neutral-600 focus:border-purple-500 focus:outline-none transition-all leading-relaxed"
+              placeholder="e.g. You are an expert engineer who writes modern TypeScript with strict type-safety..."
             />
           </div>
 
           {/* Temperature */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold text-slate-300">Creativity / Temperature</label>
-              <span className="text-xs rounded px-2 py-0.5 bg-slate-950 border border-slate-800 font-mono text-emerald-400 font-semibold">
+            <div className="flex items-center justify-between select-none">
+              <label className="text-xs font-bold text-neutral-300 uppercase tracking-wider">Temperature / Creativity</label>
+              <span className="text-[10px] rounded-lg px-2 py-0.5 bg-neutral-900 border border-neutral-800 font-mono text-purple-400 font-bold">
                 {temperature.toFixed(1)}
               </span>
             </div>
-            <p className="text-xs text-slate-400">
-              Higher settings make outputs more unique, while lower is strict, factual and repeatable.
+            <p className="text-[11px] text-neutral-500 leading-normal select-none">
+              Unlocks richer, highly imaginative answers on higher levels, or factual, repeatable output on lower levels.
             </p>
-            <div className="flex items-center gap-4">
-              <span className="text-xs text-slate-500 font-semibold font-mono">0.0 (Strict)</span>
+            <div className="flex items-center gap-4 select-none pt-1">
+              <span className="text-[10px] text-neutral-550 text-neutral-500 font-semibold font-mono">0.0 (Strict)</span>
               <input
                 type="range"
                 min="0"
@@ -87,25 +99,25 @@ export function SettingsModal({
                 step="0.1"
                 value={temperature}
                 onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                className="flex-1 h-1.5 rounded-full bg-slate-950 appearance-none cursor-pointer accent-emerald-500"
+                className="flex-1 h-1.5 rounded-full bg-neutral-900 appearance-none cursor-pointer accent-purple-500"
               />
-              <span className="text-xs text-slate-500 font-semibold font-mono">2.0 (Creative)</span>
+              <span className="text-[10px] text-neutral-550 text-neutral-500 font-semibold font-mono">2.0 (Creative)</span>
             </div>
           </div>
 
           {/* Max Tokens */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold text-slate-300">Max Output Tokens</label>
-              <span className="text-xs rounded px-2 py-0.5 bg-slate-950 border border-slate-800 font-mono text-emerald-400 font-semibold">
-                {maxTokens}
+            <div className="flex items-center justify-between select-none">
+              <label className="text-xs font-bold text-neutral-300 uppercase tracking-wider">Max Generation Size</label>
+              <span className="text-[10px] rounded-lg px-2 py-0.5 bg-neutral-900 border border-neutral-800 font-mono text-purple-400 font-bold">
+                {maxTokens} tokens
               </span>
             </div>
-            <p className="text-xs text-slate-400">
-              The limits on individual answer length (keeps responses under budget or prevents runaway loops).
+            <p className="text-[11px] text-neutral-500 leading-normal select-none">
+              The exact budget limits of the output. Higher counts permit long-form paragraphs or major codebases.
             </p>
-            <div className="flex items-center gap-4">
-              <span className="text-xs text-slate-500 font-semibold font-mono">256</span>
+            <div className="flex items-center gap-4 select-none pt-1">
+              <span className="text-[10px] text-neutral-550 text-neutral-500 font-semibold font-mono">256</span>
               <input
                 type="range"
                 min="256"
@@ -113,41 +125,43 @@ export function SettingsModal({
                 step="256"
                 value={maxTokens}
                 onChange={(e) => setMaxTokens(parseInt(e.target.value))}
-                className="flex-1 h-1.5 rounded-full bg-slate-950 appearance-none cursor-pointer accent-emerald-500"
+                className="flex-1 h-1.5 rounded-full bg-neutral-900 appearance-none cursor-pointer accent-purple-500"
               />
-              <span className="text-xs text-slate-500 font-semibold font-mono">8,192</span>
+              <span className="text-[10px] text-neutral-550 text-neutral-500 font-semibold font-mono">8k (Long)</span>
             </div>
           </div>
 
-          {/* Guidelines info */}
-          <div className="flex items-center gap-2.5 p-3.5 rounded-xl border border-emerald-950/50 bg-emerald-950/15 text-emerald-600/90 text-xs">
-            <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-            <p className="leading-normal">
-              These hyperparameters apply immediately to all active completions in the current session.
+          {/* Guidelines notes */}
+          <div className="flex items-start gap-2.5 p-3 rounded-xl border border-neutral-900 bg-neutral-900/35 text-neutral-400 text-[11px] select-none">
+            <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+            <p className="leading-relaxed">
+              Tuned configs are applied instantly to active completions. You may reset them anytime.
             </p>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-slate-800 bg-slate-950/25 px-6 py-4">
+        <div className="flex items-center justify-between border-t border-neutral-900 bg-neutral-950 px-6 py-4 select-none">
           <button
+            type="button"
             onClick={handleReset}
-            className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors duration-150 py-1.5 px-3 rounded-lg hover:bg-slate-800"
+            className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-white transition-all py-1.5 px-3 rounded-lg hover:bg-neutral-900 cursor-pointer border border-transparent hover:border-neutral-805"
             id="reset-settings-btn"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Defaults</span>
+            <span className="font-semibold">Reset Defaults</span>
           </button>
           
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-sm font-semibold text-white tracking-wide shadow-lg shadow-emerald-950/50 transition-all duration-150 hover:translate-y-[-1px] active:translate-y-0"
+            className="rounded-xl bg-white text-black font-semibold text-xs px-4 py-2.5 hover:bg-neutral-100 transition-all cursor-pointer shadow-lg active:scale-95"
             id="save-settings-btn"
           >
-            Apply Parameters
+            Apply Configurations
           </button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
