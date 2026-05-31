@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy, Check, Terminal, FileCode, CheckSquare } from 'lucide-react';
+import { Copy, Check, Terminal, FileCode } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface MessageRendererProps {
@@ -23,9 +23,9 @@ export function MessageRenderer({ content }: MessageRendererProps) {
           );
         } else if (part.type === 'header') {
           const level = part.level || 1;
-          const classes = level === 1 ? 'text-lg font-bold pt-3 pb-1 text-white border-b border-neutral-850/60 font-sans tracking-tight' :
-                          level === 2 ? 'text-md font-semibold pt-2 text-white font-sans' :
-                          'text-xs font-bold pt-1.5 uppercase tracking-wider text-neutral-300 font-sans';
+          const classes = level === 1 ? 'text-lg font-display font-bold pt-3 pb-1 text-white border-b border-white/[0.04] tracking-tight' :
+                          level === 2 ? 'text-base font-display font-semibold pt-2 text-white' :
+                          'text-xs font-bold pt-1.5 uppercase tracking-wider text-neutral-400 font-sans';
           return <h3 key={idx} className={classes}>{part.text}</h3>;
         } else if (part.type === 'list-item') {
           return (
@@ -35,7 +35,7 @@ export function MessageRenderer({ content }: MessageRendererProps) {
               animate={{ opacity: 1, x: 0 }}
               className="flex items-start pl-1.5 space-x-2.5 pt-0.5"
             >
-              <div className="w-1.5 h-1.5 rounded-full bg-purple-500/80 shrink-0 mt-2.5 select-none" />
+              <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0 mt-2.5 select-none" />
               <span className="flex-1 text-neutral-300">
                 {renderInlineFormatting(part.text)}
               </span>
@@ -54,7 +54,7 @@ export function MessageRenderer({ content }: MessageRendererProps) {
   );
 }
 
-// Subcomponents with polished styling
+// Subcomponents with polished styling and light-weight regex syntax highlighting
 function CodeBlock({ language, code }: { language: string; code: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -70,21 +70,81 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
 
   const isTerminal = ['bash', 'sh', 'shell', 'zsh', 'terminal'].includes(language.toLowerCase());
 
+  // High-performance token coloring helper
+  const highlightCodeTokenized = (rawCode: string, langName: string) => {
+    const l = langName.toLowerCase();
+    
+    if (['js', 'jsx', 'ts', 'tsx', 'javascript', 'typescript', 'json', 'python', 'py', 'html', 'css', 'bash', 'shell', 'sh'].includes(l)) {
+      // Escape HTML characters to prevent XSS and malformed structures
+      let html = rawCode
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+      // Comments: line-comments & blocks
+      if (l === 'python' || l === 'py') {
+        html = html.replace(/(#.*?)$/gm, '<span class="text-neutral-500 italic font-normal">$1</span>');
+      } else if (l === 'bash' || l === 'shell' || l === 'sh') {
+        html = html.replace(/(#.*?)$/gm, '<span class="text-neutral-500 italic font-normal">$1</span>');
+      } else {
+        html = html.replace(/(\/\/.*?)$/gm, '<span class="text-neutral-500 italic font-normal">$1</span>');
+        html = html.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="text-neutral-500 italic font-normal">$1</span>');
+      }
+
+      // Strings: double, single & template quotes
+      html = html.replace(/(["'`])(.*?)\1/g, '<span class="text-amber-300">$1$2$1</span>');
+
+      // Constants and built-in type keywords
+      const builtins = ['const', 'let', 'var', 'true', 'false', 'null', 'undefined'];
+      const builtinsRegex = new RegExp(`\\b(${builtins.join('|')})\\b`, 'g');
+      html = html.replace(builtinsRegex, '<span class="text-purple-400 font-medium">$1</span>');
+
+      // Core programming statements & controls (blue/indigo)
+      const keywordGroup = [
+        'def', 'class', 'return', 'if', 'else', 'elif', 'for', 'while', 'import', 'export', 'from',
+        'default', 'try', 'catch', 'finally', 'async', 'await', 'function', 'interface', 'type', 'extends'
+      ];
+      const keywordsRegex = new RegExp(`\\b(${keywordGroup.join('|')})\\b`, 'g');
+      html = html.replace(keywordsRegex, '<span class="text-indigo-400">$1</span>');
+
+      // Command-line tools keywords for shell scripts
+      if (l === 'bash' || l === 'shell' || l === 'sh') {
+        const shellCmds = ['npm', 'npx', 'node', 'cd', 'mkdir', 'git', 'curl', 'wget', 'sudo', 'grep', 'cat', 'echo', 'ls', 'install', 'run', 'build'];
+        const shellRegex = new RegExp(`\\b(${shellCmds.join('|')})\\b`, 'g');
+        html = html.replace(shellRegex, '<span class="text-emerald-400 font-semibold">$1</span>');
+      }
+
+      // Numeric values
+      html = html.replace(/\b(\d+)\b/g, '<span class="text-pink-400">$1</span>');
+
+      return (
+        <code 
+          className="font-mono block select-all whitespace-pre" 
+          dangerouslySetInnerHTML={{ __html: html }} 
+        />
+      );
+    }
+
+    // Default raw code fallback
+    return <code className="font-mono block select-all whitespace-pre">{rawCode}</code>;
+  };
+
   return (
-    <div className="my-4 rounded-xl overflow-hidden border border-neutral-850 bg-[#070708] font-mono text-xs md:text-[13px] shadow-xl">
-      <div className="flex items-center justify-between px-4 py-2.5 bg-neutral-900 border-b border-neutral-850 text-neutral-400 font-sans select-none text-[11px] font-medium font-sans">
+    <div className="my-4 rounded-xl overflow-hidden border border-white/[0.06] bg-[#08080a] font-mono text-xs md:text-[13px] shadow-xl">
+      {/* Top Header tab bar */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-white/[0.03] border-b border-white/[0.04] text-neutral-400 font-sans select-none text-[11px] font-medium">
         <div className="flex items-center gap-2">
           {isTerminal ? (
             <Terminal className="w-3.5 h-3.5 text-neutral-500" />
           ) : (
-            <FileCode className="w-3.5 h-3.5 text-purple-400/80" />
+            <FileCode className="w-3.5 h-3.5 text-indigo-400" />
           )}
           <span className="lowercase font-semibold text-neutral-300 tracking-wide">{language || 'code'}</span>
         </div>
         
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1.5 hover:text-white transition-all duration-150 py-1 px-2 rounded-lg hover:bg-neutral-800 cursor-pointer select-none border border-transparent hover:border-neutral-700/40 text-[10.5px]"
+          className="flex items-center gap-1.5 hover:text-white transition-all duration-150 py-1 px-2 rounded-lg hover:bg-white/[0.04] cursor-pointer select-none border border-transparent hover:border-white/[0.04] text-[10.5px]"
           title="Copy code snippet"
           type="button"
         >
@@ -101,8 +161,10 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
           )}
         </button>
       </div>
-      <div className="p-4 overflow-x-auto text-[#eceef0] whitespace-pre scrollbar-thin scrollbar-thumb-neutral-850 bg-[#070708]">
-        <code className="font-mono block select-all">{code}</code>
+
+      {/* Code viewport area */}
+      <div className="p-4 overflow-x-auto text-[#eceef0] whitespace-pre scrollbar-thin scrollbar-thumb-white/[0.04] bg-[#08080a]">
+        {highlightCodeTokenized(code, language)}
       </div>
     </div>
   );
@@ -219,7 +281,7 @@ function renderInlineFormatting(text: string) {
       return (
         <code 
           key={idx} 
-          className="mx-1 px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-850 text-[12px] font-mono text-purple-355 text-purple-300 font-semibold select-all"
+          className="mx-1 px-1.5 py-0.5 rounded bg-white/[0.02] border border-white/[0.04] text-[12px] font-mono text-indigo-300 font-semibold select-all"
         >
           {part.substring(1, part.length - 1)}
         </code>

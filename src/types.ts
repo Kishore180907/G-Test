@@ -33,6 +33,15 @@ export interface Message {
   providerUsed?: ProviderId;
   error?: boolean;
   wasAutoRouted?: boolean;
+  feedback?: 'up' | 'down' | null;
+}
+
+export interface PromptTemplate {
+  id: string;
+  title: string;
+  prompt: string;
+  category: string;
+  createdAt: number;
 }
 
 export interface ChatSession {

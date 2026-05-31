@@ -23,61 +23,77 @@ import {
   FileCode,
   LineChart,
   MessageSquare,
-  Bookmark
+  Bookmark,
+  Copy,
+  Eye,
+  EyeOff,
+  BookOpen,
+  Download,
+  Sliders
 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { ModelSelector } from './components/ModelSelector';
 import { ChatInput } from './components/ChatInput';
 import { SettingsModal } from './components/SettingsModal';
 import { MessageRenderer } from './components/MessageRenderer';
-import { ChatSession, Message, Model, ProviderId, ServerConfigStatus } from './types';
+import { LegalModal } from './components/LegalModals';
+import { CommandPalette, CommandAction } from './components/CommandPalette';
+import { PromptLibrary } from './components/PromptLibrary';
+import { ChatSession, Message, Model, ProviderId, ServerConfigStatus, PromptTemplate } from './types';
 import { getOptimalModel } from './lib/router';
 import { motion, AnimatePresence } from 'motion/react';
 
 const SUGGESTED_CARDS = [
   {
-    title: "Coding Workspace",
-    prompt: "Write a high-performance Express server-side route in TypeScript",
-    category: "Code",
-    description: "Write clean schemas, parse formats, or mock APIs.",
-    color: "from-purple-500/20 to-blue-500/20 text-purple-400"
+    title: "Code Optimization",
+    prompt: "Write a clean TypeScript debounce or throttle utility function with explanation",
+    category: "Practical Code",
+    description: "Avoid redundant updates, throttle scroll events, or model inputs."
   },
   {
-    title: "Technical Writing",
-    prompt: "Help me write an elegant marketing copy explaining open-source LLMs",
-    category: "Writing",
-    description: "Compose summaries, draft copies, or outline documents.",
-    color: "from-blue-500/20 to-indigo-500/20 text-blue-400"
+    title: "Architecture Guide",
+    prompt: "Contrast SQL relational scaling vs NoSQL document store trade-offs",
+    category: "System Design",
+    description: "Compare indexing speeds, ACID compliance, and vertical vs horizontal growth."
   },
   {
-    title: "Deep Analysis & Tech",
-    prompt: "Compare the difference between OpenRouter and NVIDIA microservices",
-    category: "Explain",
-    description: "Examine infrastructure layers, specs, or benchmark reports.",
-    color: "from-indigo-500/20 to-violet-500/20 text-indigo-400"
-  },
-  {
-    title: "Data Operations",
-    prompt: "Help me write a Python script to filter and summarize CSV columns",
-    category: "Data",
-    description: "Analyze stats, formulate math equations, or parse lists.",
-    color: "from-pink-500/20 to-rose-500/20 text-pink-400"
-  },
-  {
-    title: "Marketing Campaign",
-    prompt: "Craft a social media plan outline for launching an offline-first mobile app",
-    category: "Marketing",
-    description: "Design social copy, newsletter headlines, or brand ideas.",
-    color: "from-orange-500/20 to-amber-500/20 text-amber-400"
-  },
-  {
-    title: "Strategic Blueprint",
-    prompt: "Compare SaaS pricing tiers and design a tier-based expansion model",
-    category: "Business",
-    description: "Brainstorm strategic pillars, tiers, or expansion indexes.",
-    color: "from-emerald-500/20 to-teal-500/20 text-emerald-400"
+    title: "Parsers & Automation",
+    prompt: "Write a Python script to parse a directory of Markdown files and list all links",
+    category: "Automation",
+    description: "Automate report audits, extract references quickly, or find broken URLs."
   }
 ];
+
+function CopyMessageButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="p-1 hover:bg-neutral-850 rounded text-neutral-500 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[9.5px] select-none"
+      title="Copy message contents"
+    >
+      {copied ? (
+        <>
+          <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+          <span className="text-emerald-400 font-semibold text-[9.5px]">Copied</span>
+        </>
+      ) : (
+        <>
+          <Copy className="w-3 h-3 text-neutral-500 shrink-0" />
+          <span>Copy</span>
+        </>
+      )}
+    </button>
+  );
+}
 
 export default function App() {
   // Session history loading with safe localStorage parsing
@@ -111,6 +127,39 @@ export default function App() {
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [legalModalOpen, setLegalModalOpen] = useState(false);
+  const [legalModalType, setLegalModalType] = useState<'tos' | 'privacy'>('tos');
+
+  // Premium Features States
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isPromptLibraryOpen, setIsPromptLibraryOpen] = useState(false);
+  const [isFocusModeActive, setIsFocusModeActive] = useState(() => {
+    try {
+      return localStorage.getItem('aura_focus_mode_active') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [customPrompts, setCustomPrompts] = useState<PromptTemplate[]>(() => {
+    try {
+      const saved = localStorage.getItem('aura_custom_prompts');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Sync Focus Mode & Custom Prompts to storage
+  useEffect(() => {
+    localStorage.setItem('aura_focus_mode_active', String(isFocusModeActive));
+  }, [isFocusModeActive]);
+
+  useEffect(() => {
+    localStorage.setItem('aura_custom_prompts', JSON.stringify(customPrompts));
+  }, [customPrompts]);
+  
+  const abortControllerRef = useRef<AbortController | null>(null);
   
   // Real-time rolling generation timer state
   const [streamDuration, setStreamDuration] = useState<number>(0);
@@ -225,11 +274,38 @@ export default function App() {
 
   // Create keyboard shortcut listeners
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Esc: dismiss modal Dialogues
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      // Esc: dismiss modal Dialogues and deactivate focus mode if desired
       if (e.key === 'Escape') {
         setIsSettingsOpen(false);
         setIsShortcutsOpen(false);
+        setIsCommandPaletteOpen(false);
+        setIsPromptLibraryOpen(false);
+      }
+      // Ctrl + Shift + P or Cmd + Shift + P : Command Palette
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+      }
+      // F10 : Toggle Focus Mode
+      if (e.key === 'F10') {
+        e.preventDefault();
+        setIsFocusModeActive(prev => !prev);
+      }
+      // F9 : Toggle Sidebar
+      if (e.key === 'F9') {
+        e.preventDefault();
+        setIsSidebarOpen(prev => !prev);
+      }
+      // Ctrl + B or Cmd + B : Open Prompt blueprints
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setIsPromptLibraryOpen(prev => !prev);
+      }
+      // Ctrl + E or Cmd + E : Export conversation json string
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        handleExportHistory();
       }
       // Ctrl + , or Cmd + , : Tuning Modal
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
@@ -249,7 +325,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [sessions, activeSessionId, activeModelId, activeProviderId, systemPrompt, temperature, maxTokens]);
+  }, [sessions, activeSessionId, activeModelId, activeProviderId, systemPrompt, temperature, maxTokens, isFocusModeActive, isSidebarOpen]);
 
   // Create a new session
   const handleNewSession = (initialMsg?: string) => {
@@ -296,6 +372,25 @@ export default function App() {
     }
   };
 
+  // Export current conversation history (JSON format)
+  const handleExportHistory = () => {
+    if (!activeSession) {
+      alert("No active session selected to export.");
+      return;
+    }
+    try {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(activeSession, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `aura_thread_${activeSession.id}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } catch (err) {
+      console.error("Export thread session error: ", err);
+    }
+  };
+
   // Scroll to bottom trigger
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior });
@@ -314,6 +409,28 @@ export default function App() {
   useEffect(() => {
     scrollToBottom('instant');
   }, [activeSessionId]);
+
+  const handleOpenToS = () => {
+    setLegalModalType('tos');
+    setLegalModalOpen(true);
+  };
+
+  const handleOpenPrivacy = () => {
+    setLegalModalType('privacy');
+    setLegalModalOpen(true);
+  };
+
+  const handleStopGenerating = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsStreaming(false);
+    if (streamTimerIntervalRef.current) {
+      clearInterval(streamTimerIntervalRef.current);
+      streamTimerIntervalRef.current = null;
+    }
+  };
 
   // Streaming completion initiator
   const handleSendMessage = async (userMessageText: string) => {
@@ -406,12 +523,16 @@ export default function App() {
     const matchingModel = models.find(m => m.id === modelToUse && m.provider === providerToUse);
     const customModelInfo = matchingModel?.customModel;
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
+        signal: controller.signal,
         body: JSON.stringify({
           messages: updatedMessages,
           modelId: modelToUse,
@@ -526,6 +647,10 @@ export default function App() {
       }));
 
     } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log('Stream generation aborted by user.');
+        return;
+      }
       console.error('Completion error: ', err);
       const errString = err instanceof Error 
         ? err.message 
@@ -552,6 +677,7 @@ export default function App() {
       }));
     } finally {
       setIsStreaming(false);
+      abortControllerRef.current = null;
       if (streamTimerIntervalRef.current) {
         clearInterval(streamTimerIntervalRef.current);
         streamTimerIntervalRef.current = null;
@@ -640,37 +766,114 @@ export default function App() {
 
   const hasConfiguredKeys = status.openrouterConfigured || status.nvidiaConfigured || status.groqConfigured;
 
+  const commandActions: CommandAction[] = useMemo(() => [
+    {
+      id: 'focus-mode',
+      label: isFocusModeActive ? 'Deactivate High Performance Focus Mode' : 'Activate High Performance Focus Mode',
+      shortcut: 'f10',
+      icon: Eye,
+      action: () => {
+        setIsFocusModeActive(prev => !prev);
+        setIsCommandPaletteOpen(false);
+      }
+    },
+    {
+      id: 'prompt-library',
+      label: 'Open Prompt blueprints library',
+      shortcut: 'ctrl+b',
+      icon: BookOpen,
+      action: () => {
+        setIsPromptLibraryOpen(true);
+        setIsCommandPaletteOpen(false);
+      }
+    },
+    {
+      id: 'new-chat',
+      label: 'New Thread workspace session',
+      shortcut: 'ctrl+k',
+      icon: Zap,
+      action: () => {
+        handleNewSession();
+        setIsCommandPaletteOpen(false);
+      }
+    },
+    {
+      id: 'parameters',
+      label: 'Configure Model Hyperparameters',
+      shortcut: 'ctrl+,',
+      icon: Settings,
+      action: () => {
+        setIsSettingsOpen(true);
+        setIsCommandPaletteOpen(false);
+      }
+    },
+    {
+      id: 'shortcuts',
+      label: 'View keyboard command short-cuts',
+      shortcut: 'ctrl+/',
+      icon: Keyboard,
+      action: () => {
+        setIsShortcutsOpen(true);
+        setIsCommandPaletteOpen(false);
+      }
+    },
+    {
+      id: 'export-history',
+      label: 'Export Thread Completion to JSON',
+      shortcut: 'ctrl+e',
+      icon: Download,
+      action: () => {
+        handleExportHistory();
+        setIsCommandPaletteOpen(false);
+      }
+    },
+    {
+      id: 'clear-all',
+      label: 'Permanent Cleansing of Workspace Thread history',
+      shortcut: 'danger',
+      icon: Trash2,
+      action: () => {
+        handleClearAll();
+        setIsCommandPaletteOpen(false);
+      }
+    }
+  ], [isFocusModeActive, sessions, activeSessionId, activeModelId, activeProviderId, systemPrompt, temperature, maxTokens]);
+
   return (
     <div className="flex h-screen bg-[#070708] overflow-hidden font-sans text-neutral-200 select-none antialiased" id="main-app-container">
       
       {/* Sidebar Thread Navigation */}
-      <div className={`fixed inset-y-0 left-0 z-40 transition-transform duration-300 md:static ${
-        isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:hidden'
-      }`}>
-        <Sidebar
-          sessions={sessions}
-          activeSessionId={activeSessionId}
-          onSelectSession={(id) => {
-            setActiveSessionId(id);
-            if (window.innerWidth < 768) {
-              setIsSidebarOpen(false);
-            }
-          }}
-          onNewSession={() => {
-            handleNewSession();
-            if (window.innerWidth < 768) {
-              setIsSidebarOpen(false);
-            }
-          }}
-          onDeleteSession={handleDeleteSession}
-          onClearAll={handleClearAll}
-          status={status}
-        />
-      </div>
+      {!isFocusModeActive && (
+        <div className={`fixed inset-y-0 left-0 z-40 transition-transform duration-300 md:static ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:hidden'
+        }`}>
+          <Sidebar
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            onSelectSession={(id) => {
+              setActiveSessionId(id);
+              if (window.innerWidth < 768) {
+                setIsSidebarOpen(false);
+              }
+            }}
+            onNewSession={() => {
+              handleNewSession();
+              if (window.innerWidth < 768) {
+                setIsSidebarOpen(false);
+              }
+            }}
+            onDeleteSession={handleDeleteSession}
+            onClearAll={handleClearAll}
+            status={status}
+            onOpenToS={handleOpenToS}
+            onOpenPrivacy={handleOpenPrivacy}
+          />
+        </div>
+      )}
 
       {/* Backdrop overlay for mobile drawer */}
       <AnimatePresence>
-        {isSidebarOpen && (
+        {isSidebarOpen && !isFocusModeActive && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -686,63 +889,85 @@ export default function App() {
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0a0a0b]" id="chat-workspace">
         
         {/* Top bar navbar */}
-        <header className="flex items-center justify-between border-b border-neutral-900 bg-[#070708]/75 py-3 px-4 md:px-6 shrink-0 z-10">
-          <div className="flex items-center gap-3">
-            {/* Sidebar toggle button */}
-            <button
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-900 transition-all cursor-pointer border border-transparent hover:border-neutral-850"
-              aria-label="Toggle Navigation Sidebar"
-              id="sidebar-toggle-btn"
-              type="button"
-            >
-              {isSidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-            </button>
+        {!isFocusModeActive ? (
+          <header className="flex items-center justify-between border-b border-white/[0.04] bg-[#070708]/75 py-3 px-4 md:px-6 shrink-0 z-10 transition-colors">
+            <div className="flex items-center gap-3">
+              {/* Sidebar toggle button */}
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-900 transition-all cursor-pointer border border-transparent hover:border-neutral-850"
+                aria-label="Toggle Navigation Sidebar"
+                id="sidebar-toggle-btn"
+                type="button"
+              >
+                {isSidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+              </button>
 
-            {/* Selector wrapper */}
-            <ModelSelector
-              models={models}
-              selectedModelId={activeModelId}
-              selectedProviderId={activeProviderId}
-              onSelect={handleModelSelect}
-              status={status}
-              onRefreshModels={fetchModels}
-              isLoadingModels={isLoadingModels}
-              routingMode={routingMode}
-              onRoutingModeChange={setRoutingMode}
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Systems active telemetry dot */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-neutral-900 bg-neutral-900/10 text-neutral-400 text-[10px] font-bold tracking-wider">
-              <span className={`w-1.5 h-1.5 rounded-full ${hasConfiguredKeys ? 'bg-emerald-500 animate-pulse' : 'bg-purple-500'}`} />
-              <span className="uppercase">{hasConfiguredKeys ? 'API Gateways Online' : 'Systems Active (Demo)'}</span>
+              {/* Selector wrapper */}
+              <ModelSelector
+                models={models}
+                selectedModelId={activeModelId}
+                selectedProviderId={activeProviderId}
+                onSelect={handleModelSelect}
+                status={status}
+                onRefreshModels={fetchModels}
+                isLoadingModels={isLoadingModels}
+                routingMode={routingMode}
+                onRoutingModeChange={setRoutingMode}
+              />
             </div>
 
-            {/* Keyboard Shortcuts Trigger Button */}
-            <button
-              onClick={() => setIsShortcutsOpen(true)}
-              className="p-1.5 rounded-xl border border-neutral-900 bg-[#0d0d0e]/50 text-neutral-400 hover:text-white transition-all cursor-pointer hover:border-neutral-800"
-              title="View Keyboard Shortcuts"
-              id="shortcuts-trigger-btn"
-              type="button"
-            >
-              <Keyboard className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Status indicator */}
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.04] bg-white/[0.01]/10 text-neutral-400 text-[10px] font-semibold select-none">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span>Systems Online</span>
+              </div>
 
-            {/* Tuning parameter controls */}
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-neutral-900 hover:border-neutral-800 bg-[#0d0d0e]/50 hover:bg-neutral-905 text-neutral-300 hover:text-white transition-all text-xs font-semibold cursor-pointer"
-              id="settings-trigger-btn"
-              type="button"
+              {/* Keyboard Shortcuts Trigger Button */}
+              <button
+                onClick={() => setIsShortcutsOpen(true)}
+                className="p-1.5 rounded-xl border border-white/[0.04] bg-white/[0.01]/50 text-neutral-400 hover:text-white transition-all cursor-pointer hover:border-white/[0.08]"
+                title="View Keyboard Shortcuts"
+                id="shortcuts-trigger-btn"
+                type="button"
+              >
+                <Keyboard className="w-4 h-4" />
+              </button>
+
+              {/* Tuning parameter controls */}
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/[0.04] hover:border-white/[0.08] bg-white/[0.01]/50 hover:bg-white/[0.03] text-neutral-300 hover:text-white transition-all text-xs font-semibold cursor-pointer"
+                id="settings-trigger-btn"
+                type="button"
+              >
+                <Settings className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline">Parameters</span>
+              </button>
+            </div>
+          </header>
+        ) : (
+          <div className="absolute top-4 right-4 z-40 select-none flex items-center gap-2">
+            <motion.div 
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-3 px-3.5 py-1.5 rounded-xl border border-white/[0.04] bg-[#07070a]/60 backdrop-blur-md text-xs text-neutral-400 shadow-md font-sans"
             >
-              <Settings className="w-3.5 h-3.5 text-purple-400" />
-              <span className="hidden sm:inline">Parameters</span>
-            </button>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-505 bg-indigo-500 animate-pulse" />
+                <span className="font-semibold text-neutral-300 font-display">Focus Mode Active</span>
+              </div>
+              <span className="text-neutral-600">|</span>
+              <button 
+                onClick={() => setIsFocusModeActive(false)}
+                className="font-bold text-indigo-455 text-indigo-400 hover:text-indigo-300 hover:underline transition-all cursor-pointer font-display"
+              >
+                Exit Focus (F10)
+              </button>
+            </motion.div>
           </div>
-        </header>
+        )}
 
         {/* Global Warnings Panel */}
         {errorMessage && (
@@ -771,23 +996,23 @@ export default function App() {
                 className="space-y-4"
               >
                 {/* Central Sparkling custom AI mark */}
-                <div className="relative inline-flex items-center justify-center p-5 rounded-3xl bg-neutral-900/30 border border-neutral-850 shadow-2xl relative overflow-hidden group">
-                  <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/10 via-blue-500/10 to-indigo-500/10 animate-pulse" />
-                  <Sparkles className="w-10 h-10 text-purple-400" />
+                <div className="relative inline-flex items-center justify-center p-5 rounded-3xl bg-neutral-900/40 border border-neutral-850 shadow-2xl overflow-hidden group">
+                  <div className="absolute inset-0 bg-indigo-500/5 animate-pulse" />
+                  <Sparkles className="w-10 h-10 text-indigo-400" />
                 </div>
                 
                 <div className="space-y-2">
                   <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white leading-tight">
                     How can I help you today?
                   </h2>
-                  <p className="text-neutral-500 text-xs md:text-sm max-w-md mx-auto leading-relaxed">
-                    Welcome to Aura Workspace. Type your question or choose one of the quick start action cards to test prompts.
+                  <p className="text-neutral-500 text-xs md:text-sm max-w-sm mx-auto leading-relaxed">
+                    Welcome to Aura Workspace. Choose one of our practical action cards or type custom inquiries into the terminal.
                   </p>
                 </div>
               </motion.div>
 
               {/* Suggestions Prompt Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 max-w-4xl mx-auto pt-4 text-left">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 max-w-4xl mx-auto pt-4 text-left">
                 {SUGGESTED_CARDS.map((card, idx) => (
                   <motion.button
                     key={idx}
@@ -795,24 +1020,16 @@ export default function App() {
                     onClick={() => handleSelectSuggestedPrompt(card.prompt)}
                     whileHover={{ scale: 1.015, y: -2 }}
                     whileTap={{ scale: 0.98 }}
-                    className="p-4 rounded-xl border border-neutral-900 hover:border-neutral-800 bg-[#0a0a0b]/40 hover:bg-neutral-900/30 text-left transition-all duration-200 cursor-pointer space-y-2 group"
+                    className="p-4 rounded-xl border border-neutral-900 hover:border-indigo-505/30 bg-[#0d0d0e]/40 hover:bg-neutral-900/30 text-left transition-all duration-200 cursor-pointer space-y-2 group"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">{card.category}</span>
-                      <div className={`w-1.5 h-1.5 rounded-full bg-gradient-to-tr ${card.color} opacity-80 group-hover:opacity-100 transition-opacity`} />
+                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 opacity-60 group-hover:opacity-100 transition-opacity" />
                     </div>
                     <h4 className="text-xs font-bold text-neutral-200 group-hover:text-white transition-colors">{card.title}</h4>
                     <p className="text-[10.5px] text-neutral-500 leading-normal line-clamp-2">{card.description}</p>
                   </motion.button>
                 ))}
-              </div>
-
-              {/* Subtle cluster metrics label */}
-              <div className="pt-2 select-none">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-neutral-900/60 bg-[#0d0d0e]/30 text-neutral-500 text-[10px] font-mono leading-none">
-                  <Activity className="w-3 h-3 text-emerald-500 animate-pulse" />
-                  <span>Secure Node: {selectedModelObj.provider || 'api'} active proxy route</span>
-                </span>
               </div>
 
             </div>
@@ -832,12 +1049,8 @@ export default function App() {
                     id={`message-container-${m.id}`}
                   >
                     {!isUser && (
-                      <div className={`p-1.5 rounded-xl mt-1 shrink-0 bg-neutral-900 border border-neutral-850 shadow-md ${
-                        m.providerUsed === 'nvidia' 
-                          ? 'text-emerald-450 border-emerald-900/30' 
-                          : 'text-purple-450 border-purple-900/30'
-                      }`}>
-                        <Bot className="w-4 h-4 md:w-4.5 md:h-4.5" />
+                      <div className="p-1.5 rounded-xl mt-1 shrink-0 bg-neutral-900 border border-neutral-850 shadow-md text-indigo-400">
+                        <Bot className="w-4 h-4 md:w-4.5" />
                       </div>
                     )}
 
@@ -851,59 +1064,37 @@ export default function App() {
                       
                       {/* Telemetry metadata tags for Assistant responses */}
                       {!isUser && (
-                        <div className="flex items-center gap-2 text-[9px] font-medium font-mono text-neutral-500 uppercase tracking-widest mb-3 pb-1.5 border-b border-neutral-900/50 select-none">
-                          <span className="text-neutral-450 font-bold">{m.modelUsed?.split('/').pop() || 'Aura Agent'}</span>
-                          <span>•</span>
-                          <span>
-                            {m.providerUsed === 'nvidia' 
-                              ? 'NVIDIA NIM' 
-                              : m.providerUsed === 'generic-chat-completion-api'
-                                ? 'GROQ API'
-                                : 'OpenRouter'}
-                          </span>
-                          {m.wasAutoRouted && (
-                            <>
-                              <span>•</span>
-                              <span className="flex items-center gap-0.5 text-purple-400 bg-purple-950/20 border border-purple-905 px-1 rounded font-black text-[8px]">
-                                <Sparkles className="w-2.5 h-2.5" />
+                        <div className="flex items-center justify-between text-[10px] text-neutral-500 select-none border-b border-neutral-900/60 pb-1.5 mb-2 px-1 font-sans">
+                          <span className="font-semibold text-neutral-400 capitalize flex items-center gap-1.5">
+                            {(m.modelUsed || 'Aura Model').split('/').pop()?.replace(':free', '')}
+                            {m.wasAutoRouted && (
+                              <span className="text-[8.5px] tracking-wide font-medium bg-indigo-950/40 border border-indigo-900/40 text-indigo-400 px-1 py-0.5 rounded uppercase leading-none">
                                 Smart Routed
                               </span>
-                            </>
-                          )}
+                            )}
+                          </span>
                           
-                          {/* Live rolling streaming indicator */}
-                          {isStreaming && idx === activeSession.messages.length - 1 && (
-                            <span className="ml-auto inline-flex items-center gap-1.5 text-purple-400 font-bold animate-pulse text-[8.5px]">
-                              <RefreshCw className="w-2.5 h-2.5 animate-spin" />
-                              <span>Generating {streamDuration}s</span>
-                            </span>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {isStreaming && idx === activeSession.messages.length - 1 && (
+                              <span className="inline-flex items-center gap-1 text-indigo-400 animate-pulse text-[9px] font-medium font-mono">
+                                <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                                <span>Generating {streamDuration}s</span>
+                              </span>
+                            )}
+                            
+                            {!isStreaming && idx === activeSession.messages.length - 1 && lastResponseTime && (
+                              <span className="text-[9px] text-neutral-500 font-mono">
+                                Took {lastResponseTime}s
+                              </span>
+                            )}
 
-                          {/* Completed stats timing */}
-                          {!isStreaming && idx === activeSession.messages.length - 1 && lastResponseTime && (
-                            <span className="ml-auto text-neutral-500 text-[8.5px]">
-                              Took {lastResponseTime}s
-                            </span>
-                          )}
+                            <CopyMessageButton content={m.content} />
+                          </div>
                         </div>
                       )}
 
                       {/* Content parsing block */}
                       <MessageRenderer content={m.content} />
-                      
-                      {/* Footer telemetry details (estimate length / timestamp) */}
-                      <div className="flex items-center justify-between text-[9px] font-mono font-medium text-neutral-600 mt-3 select-none">
-                        <span className="flex items-center gap-1 uppercase tracking-wide">
-                          <span>{m.content.length} Character{(m.content.length === 1 ? '' : 's')}</span>
-                          <span>•</span>
-                          <span>{Math.ceil(m.content.length / 4)} EST. Tokens</span>
-                        </span>
-                        
-                        <span className="flex items-center font-bold">
-                          <Clock className="w-2.5 h-2.5 mr-0.5" />
-                          <span>{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        </span>
-                      </div>
 
                     </div>
                   </motion.div>
@@ -934,6 +1125,7 @@ export default function App() {
             isStreaming={isStreaming}
             selectedModelName={selectedModelObj.name}
             isFree={selectedModelObj.isFree}
+            onStop={handleStopGenerating}
           />
         </div>
       </div>
@@ -960,16 +1152,16 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="w-full max-w-md overflow-hidden rounded-2xl border border-neutral-900 bg-neutral-950 shadow-2xl relative z-10 font-sans p-6 text-left"
+              className="w-full max-w-md overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0d0d10] shadow-2xl relative z-10 font-sans p-6 text-left"
             >
-              <div className="flex items-center justify-between border-b border-neutral-900 pb-4 mb-4 select-none">
+              <div className="flex items-center justify-between border-b border-white/[0.04] pb-4 mb-4 select-none">
                 <div className="flex items-center gap-2">
                   <Keyboard className="w-4.5 h-4.5 text-purple-400" />
                   <h3 className="text-sm font-bold text-white tracking-tight">Keyboard Workspace Shortcuts</h3>
                 </div>
                 <button
                   onClick={() => setIsShortcutsOpen(false)}
-                  className="rounded-lg p-1 hover:bg-neutral-900 text-neutral-400 hover:text-white cursor-pointer select-none"
+                  className="rounded-lg p-1 hover:bg-white/[0.03] text-neutral-400 hover:text-white cursor-pointer select-none transition-colors"
                   type="button"
                 >
                   <X className="w-4 h-4" />
@@ -978,11 +1170,54 @@ export default function App() {
 
               <div className="space-y-3.5 select-none text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-neutral-400 font-medium">New Workspace Thread</span>
+                  <span className="text-neutral-400 font-medium">Aura Command Palette Launcher</span>
+                  <div className="flex items-center gap-1">
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">Ctrl</kbd>
+                    <span className="text-neutral-500 font-semibold">+</span>
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">Shift</kbd>
+                    <span className="text-neutral-500 font-semibold">+</span>
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">P</kbd>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-400 font-medium">High Performance Focus Mode</span>
+                  <div className="flex items-center gap-1">
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">F10</kbd>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-400 font-medium">Toggle Workspace Sidebar</span>
+                  <div className="flex items-center gap-1">
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">F9</kbd>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-400 font-medium">Open Prompts Library Blueprints</span>
+                  <div className="flex items-center gap-1">
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">Ctrl</kbd>
+                    <span className="text-neutral-500 font-semibold">+</span>
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">B</kbd>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-400 font-medium">New Thread Workspace</span>
                   <div className="flex items-center gap-1">
                     <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">Ctrl</kbd>
                     <span className="text-neutral-500 font-semibold">+</span>
                     <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">K</kbd>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-neutral-400 font-medium">Export Current Thread (JSON)</span>
+                  <div className="flex items-center gap-1">
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">Ctrl</kbd>
+                    <span className="text-neutral-500 font-semibold">+</span>
+                    <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">E</kbd>
                   </div>
                 </div>
 
@@ -1004,7 +1239,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-neutral-900 pt-3 mt-3.5">
+                <div className="flex items-center justify-between border-t border-white/[0.04] pt-3 mt-3.5">
                   <span className="text-neutral-400 font-medium">Auto-scroll Active Feed</span>
                   <div className="flex items-center gap-1">
                     <kbd className="px-2 py-1 rounded bg-[#111112] border border-neutral-850 font-mono text-[10px] text-white">Esc</kbd>
@@ -1012,13 +1247,39 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="mt-5 text-center select-none pt-2 border-t border-neutral-900">
+              <div className="mt-5 text-center select-none pt-2 border-t border-white/[0.04]">
                 <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold">Press escape to dismiss modal</span>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+
+      {/* Legal Modals */}
+      <LegalModal
+        isOpen={legalModalOpen}
+        type={legalModalType}
+        onClose={() => setLegalModalOpen(false)}
+      />
+
+      {/* Premium Features Overlays */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        actions={commandActions}
+      />
+
+      <PromptLibrary
+        isOpen={isPromptLibraryOpen}
+        onClose={() => setIsPromptLibraryOpen(false)}
+        prompts={customPrompts}
+        onSavePrompt={(p) => setCustomPrompts(prev => [p, ...prev])}
+        onDeletePrompt={(id) => setCustomPrompts(prev => prev.filter(p => p.id !== id))}
+        onUsePrompt={(promptText) => {
+          setIsPromptLibraryOpen(false);
+          handleSendMessage(promptText);
+        }}
+      />
 
     </div>
   );
